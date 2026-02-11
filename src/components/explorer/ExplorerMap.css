@@ -1,0 +1,51 @@
+.explorer-map {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.explorer-map .mapboxgl-map {
+  width: 100%;
+  height: 100%;
+}
+
+.map-popup {
+  padding: 0.5rem;
+  min-width: 200px;
+}
+
+.map-popup h3 {
+  color: #1f2937;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+}
+
+.map-popup p {
+  color: #4b5563;
+  font-size: 0.875rem;
+  margin: 0.25rem 0;
+}
+
+.map-popup strong {
+  color: #1f2937;
+}
+
+/* Mapbox overrides */
+.mapboxgl-popup-content {
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  padding: 0;
+}
+
+.mapboxgl-popup-close-button {
+  font-size: 1.25rem;
+  padding: 0.25rem 0.5rem;
+  color: #6b7280;
+}
+
+.mapboxgl-popup-close-button:hover {
+  background-color: transparent;
+  color: #1f2937;
+}

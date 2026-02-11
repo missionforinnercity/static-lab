@@ -1,0 +1,98 @@
+.unified-data-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0a0f0d;
+}
+
+.explorer-header {
+  background: #1a1f1d;
+  border-bottom: 1px solid #2a3f2d;
+  padding: 1rem 1.5rem;
+}
+
+.explorer-header h2 {
+  color: #e8f5e9;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard-mode-selector {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mode-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  background: #0a0f0d;
+  border: 1px solid #2a3f2d;
+  border-radius: 0.5rem;
+  color: #a5d6a7;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  background: #1a2f1d;
+  border-color: #4caf50;
+}
+
+.mode-btn.active {
+  background: #1b5e20;
+  border-color: #4caf50;
+  color: #e8f5e9;
+}
+
+.mode-icon {
+  font-size: 1.5rem;
+}
+
+.mode-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.explorer-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.explorer-sidebar {
+  width: 380px;
+  background: #1a1f1d;
+  border-right: 1px solid #2a3f2d;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.explorer-map-container {
+  flex: 1;
+  position: relative;
+}
+
+/* Custom scrollbar for sidebar */
+.explorer-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.explorer-sidebar::-webkit-scrollbar-track {
+  background: #0a0f0d;
+}
+
+.explorer-sidebar::-webkit-scrollbar-thumb {
+  background: #2a3f2d;
+  border-radius: 4px;
+}
+
+.explorer-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #4caf50;
+}

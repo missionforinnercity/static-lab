@@ -1,0 +1,256 @@
+import React, { useState, useEffect } from 'react'
+import { isBusinessOpen, getBusinessStats, getDayName, formatHour } from '../../utils/timeUtils'
+import { getCategorizedOpinionData, getOpinionStats } from '../../utils/opinionUtils'
+import { calculateOverallStats, processPropertyTransactions } from '../../utils/propertyUtils'
+import { calculateMetricStatistics } from '../../utils/networkUtils'
+import './BusinessAnalytics.css'
+
+const BUSINESS_MODES = [
+  { id: 'liveliness', label: 'Business Liveliness', icon: '🏪' },
+  { id: 'opinions', label: 'Public Opinions', icon: '💬' },
+  { id: 'ratings', label: 'Review Ratings', icon: '⭐' },
+  { id: 'amenities', label: 'Amenities', icon: '🎯' },
+  { id: 'categories', label: 'Categories', icon: '📊' },
+  { id: 'network', label: 'Network Analysis', icon: '🔗' },
+  { id: 'property', label: 'Property Sales', icon: '🏢' }
+]
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+const BusinessAnalytics = ({ 
+  mode, 
+  onModeChange, 
+  dayOfWeek, 
+  hour, 
+  onDayChange, 
+  onHourChange,
+  businessesData,
+  streetStallsData,
+  propertiesData,
+  surveyData,
+  visibleLayers,
+  onLayerToggle
+}) => {
+  const [businessStats, setBusinessStats] = useState(null)
+  const [categoryFilters, setCategoryFilters] = useState({})
+  const [opinionStats, setOpinionStats] = useState(null)
+  const [propertyStats, setPropertyStats] = useState(null)
+  
+  // Calculate business statistics
+  useEffect(() => {
+    if (businessesData?.features && mode === 'liveliness') {
+      const stats = getBusinessStats(businessesData.features, dayOfWeek, hour)
+      setBusinessStats(stats)
+    }
+  }, [businessesData, dayOfWeek, hour, mode])
+  
+  // Calculate opinion statistics
+  useEffect(() => {
+    if (surveyData?.features && mode === 'opinions') {
+      const categorized = getCategorizedOpinionData(surveyData.features, 'improve_one_thing')
+      const stats = getOpinionStats(surveyData.features, 'improve_one_thing')
+      setOpinionStats(stats)
+    }
+  }, [surveyData, mode])
+  
+  // Calculate property statistics
+  useEffect(() => {
+    if (propertiesData?.features && mode === 'property') {
+      const stats = calculateOverallStats(propertiesData.features)
+      setPropertyStats(stats)
+    }
+  }, [propertiesData, mode])
+  
+  const handleCategoryFilterToggle = (category) => {
+    setCategoryFilters(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }))
+  }
+  
+  const formatCategoryName = (category) => {
+    return category.charAt(0).toUpperCase() + category.slice(1).replace(/_/g, ' ')
+  }
+  
+  return (
+    <div className="business-analytics">
+      {/* Mode Selector */}
+      <div className="analytics-mode-selector">
+        {BUSINESS_MODES.map(m => (
+          <button
+            key={m.id}
+            className={`analytics-mode-btn ${mode === m.id ? 'active' : ''}`}
+            onClick={() => onModeChange(m.id)}
+            title={m.label}
+          >
+            <span>{m.icon}</span>
+          </button>
+        ))}
+      </div>
+      
+      {/* Business Liveliness Mode */}
+      {mode === 'liveliness' && (
+        <div className="analytics-section">
+          <div className="section-header">
+            <h3>Business Liveliness</h3>
+            <div className="time-display">
+              {getDayName(dayOfWeek)} at {formatHour(hour)}
+            </div>
+          </div>
+          
+          {/* Time Controls */}
+          <div className="time-controls">
+            <div className="control-group">
+              <label>Day of Week</label>
+              <select value={dayOfWeek} onChange={(e) => onDayChange(Number(e.target.value))}>
+                {DAYS.map((day, index) => (
+                  <option key={index} value={index}>{day}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="control-group">
+              <label>Hour</label>
+              <input 
+                type="range" 
+                min="0" 
+                max="23" 
+                value={hour} 
+                onChange={(e) => onHourChange(Number(e.target.value))}
+              />
+              <div className="hour-display">{formatHour(hour)}</div>
+            </div>
+          </div>
+          
+          {/* Statistics */}
+          {businessStats && (
+            <>
+              <div className="stats-grid">
+                <div className="stat-card primary">
+                  <div className="stat-value">{businessStats.openBusinesses}</div>
+                  <div className="stat-label">Open Now</div>
+                  <div className="stat-percentage">
+                    {Math.round((businessStats.openBusinesses / businessStats.totalBusinesses) * 100)}%
+                  </div>
+                </div>
+                
+                <div className="stat-card">
+                  <div className="stat-value">{businessStats.closedBusinesses}</div>
+                  <div className="stat-label">Closed</div>
+                </div>
+                
+                <div className="stat-card">
+                  <div className="stat-value">{businessStats.totalBusinesses}</div>
+                  <div className="stat-label">Total</div>
+                </div>
+              </div>
+              
+              {/* Category Filters */}
+              <div className="category-filters">
+                <h4>Filter by Category</h4>
+                <div className="category-list">
+                  {Object.entries(businessStats.byCategory)
+                    .filter(([_, data]) => data.open > 0)
+                    .sort((a, b) => b[1].open - a[1].open)
+                    .slice(0, 8)
+                    .map(([category, data]) => (
+                      <div 
+                        key={category}
+                        className={`category-item ${categoryFilters[category] ? 'active' : ''}`}
+                        onClick={() => handleCategoryFilterToggle(category)}
+                      >
+                        <div className="category-header">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={categoryFilters[category] || false}
+                              onChange={() => handleCategoryFilterToggle(category)}
+                            />
+                            <span>{formatCategoryName(category)}</span>
+                          </label>
+                          <span className="category-count">{data.open}/{data.total}</span>
+                        </div>
+                        <div className="category-bar">
+                          <div 
+                            className="category-bar-fill"
+                            style={{ width: `${(data.open / data.total) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      
+      {/* Opinions Mode */}
+      {mode === 'opinions' && (
+        <div className="analytics-section">
+          <div className="section-header">
+            <h3>Public Opinions</h3>
+          </div>
+          <p className="section-description">
+            Survey responses categorized by theme
+          </p>
+          
+          {opinionStats && (
+            <div className="opinion-stats">
+              <div className="stat-card">
+                <div className="stat-value">{opinionStats.total}</div>
+                <div className="stat-label">Total Responses</div>
+              </div>
+              
+              <div className="opinion-themes">
+                {Object.entries(opinionStats.byTheme).map(([theme, count]) => (
+                  <div key={theme} className="theme-item">
+                    <span className="theme-label">{formatCategoryName(theme)}</span>
+                    <span className="theme-count">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Layer Toggles */}
+      <div className="layer-controls">
+        <h4>Visible Layers</h4>
+        <div className="layer-toggles">
+          <label className="layer-toggle">
+            <input
+              type="checkbox"
+              checked={visibleLayers.businesses}
+              onChange={() => onLayerToggle('businesses')}
+            />
+            <span>Businesses</span>
+          </label>
+          
+          <label className="layer-toggle">
+            <input
+              type="checkbox"
+              checked={visibleLayers.streetStalls}
+              onChange={() => onLayerToggle('streetStalls')}
+            />
+            <span>Street Stalls</span>
+          </label>
+          
+          {mode === 'property' && (
+            <label className="layer-toggle">
+              <input
+                type="checkbox"
+                checked={visibleLayers.properties}
+                onChange={() => onLayerToggle('properties')}
+              />
+              <span>Properties</span>
+            </label>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default BusinessAnalytics

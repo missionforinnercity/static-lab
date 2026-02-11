@@ -218,14 +218,40 @@
 .gradient-bar {
   height: 1.5rem;
   border-radius: 0.25rem;
-  background: linear-gradient(90deg, 
-    #fee5d9 0%, 
-    #fcae91 25%, 
-    #fb6a4a 50%, 
-    #de2d26 75%, 
-    #a50f15 100%
-  );
   margin-bottom: 0.5rem;
+}
+
+.gradient-bar.pedestrian {
+  background: linear-gradient(90deg, 
+    #dbeafe 0%,
+    #93c5fd 20%,
+    #60a5fa 40%,
+    #3b82f6 60%,
+    #2563eb 80%,
+    #1e40af 100%
+  );
+}
+
+.gradient-bar.cycling {
+  background: linear-gradient(90deg, 
+    #d1fae5 0%,
+    #6ee7b7 20%,
+    #34d399 40%,
+    #10b981 60%,
+    #059669 80%,
+    #065f46 100%
+  );
+}
+
+.gradient-bar.network {
+  background: linear-gradient(90deg, 
+    #fef3c7 0%,
+    #fde047 20%,
+    #facc15 40%,
+    #eab308 60%,
+    #ca8a04 80%,
+    #854d0e 100%
+  );
 }
 
 .gradient-labels {
@@ -233,4 +259,206 @@
   justify-content: space-between;
   color: #a5d6a7;
   font-size: 0.75rem;
+}
+
+/* Mode selector */
+.mode-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-bottom: 1px solid #2a3f2d;
+}
+
+.mode-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #0a0f0d;
+  border: 1px solid #2a3f2d;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-radio:hover {
+  background: #1a2f1d;
+  border-color: #4caf50;
+}
+
+.mode-radio input[type="radio"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.mode-radio input[type="radio"]:checked + .radio-label {
+  color: #e8f5e9;
+  font-weight: 600;
+}
+
+.mode-radio:has(input:checked) {
+  background: #1b5e20;
+  border-color: #4caf50;
+}
+
+.radio-label {
+  color: #a5d6a7;
+  font-size: 0.875rem;
+}
+
+/* Mode content */
+.mode-content {
+  padding: 1rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.mode-content h3 {
+  color: #e8f5e9;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.mode-description {
+  color: #81c784;
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+/* Stats summary */
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  background: #0a0f0d;
+  border: 1px solid #2a3f2d;
+  border-radius: 0.5rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #4caf50;
+  margin-bottom: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #a5d6a7;
+  text-align: center;
+}
+
+/* Details section */
+.details-section {
+  margin-bottom: 1.5rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border-bottom: 1px solid #2a3f2d;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  color: #a5d6a7;
+  font-size: 0.875rem;
+}
+
+.detail-value {
+  color: #e8f5e9;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Info box */
+.info-box {
+  background: #1a2f1d;
+  border-left: 3px solid #4caf50;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 0.25rem;
+}
+
+.info-box strong {
+  color: #e8f5e9;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.info-box {
+  color: #a5d6a7;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Color gradient section */
+.color-gradient {
+  background: #0a0f0d;
+  border: 1px solid #2a3f2d;
+  border-radius: 0.5rem;
+  padding: 1rem;
+
+/* Metric selector */
+.metric-selector {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #0a0f0d;
+  border: 1px solid #2a3f2d;
+  border-radius: 0.5rem;
+}
+
+.metric-label {
+  display: block;
+  color: #a5d6a7;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.metric-dropdown {
+  width: 100%;
+  padding: 0.75rem;
+  background: #1a2f1d;
+  border: 1px solid #4caf50;
+  border-radius: 0.375rem;
+  color: #e8f5e9;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.metric-dropdown:hover {
+  background: #2a4f2d;
+  border-color: #66bb6a;
+}
+
+.metric-dropdown:focus {
+  outline: none;
+  border-color: #81c784;
+  box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.metric-dropdown option {
+  background: #1a2f1d;
+  color: #e8f5e9;
+  padding: 0.5rem;
+}
+
 }

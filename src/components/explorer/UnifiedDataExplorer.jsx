@@ -16,7 +16,7 @@ const UnifiedDataExplorer = () => {
   const [map, setMap] = useState(null)
   
   // Business dashboard state
-  const [businessMode, setBusinessMode] = useState('liveliness') // 'liveliness', 'opinions', 'ratings', 'amenities', 'categories', 'network', 'property'
+  const [businessMode, setBusinessMode] = useState('liveliness') // 'liveliness', 'opinions', 'ratings', 'amenities', 'categories', 'property'
   const [dayOfWeek, setDayOfWeek] = useState(new Date().getDay())
   const [hour, setHour] = useState(new Date().getHours())
   const [businessesData, setBusinessesData] = useState(null)
@@ -24,8 +24,32 @@ const UnifiedDataExplorer = () => {
   const [propertiesData, setPropertiesData] = useState(null)
   const [surveyData, setSurveyData] = useState(null)
   
+  // Opinion mode state
+  const [opinionSource, setOpinionSource] = useState('both') // 'formal', 'informal', 'both'
+  
+  // Amenities filters state
+  const [amenitiesFilters, setAmenitiesFilters] = useState({
+    allowsDogs: false,
+    servesBeer: false,
+    servesWine: false,
+    servesCoffee: false,
+    outdoorSeating: false,
+    liveMusic: false
+  })
+  
+  // Categories filters state
+  const [categoriesFilters, setCategoriesFilters] = useState({
+    restaurant: false,
+    cafe: false,
+    art_gallery: false,
+    bar: false,
+    store: false,
+    lodging: false
+  })
+  
   // Walkability dashboard state
-  const [activityType, setActivityType] = useState('pedestrian') // 'pedestrian' or 'cycling'
+  const [walkabilityMode, setWalkabilityMode] = useState('pedestrian') // 'pedestrian', 'cycling', 'network'
+  const [networkMetric, setNetworkMetric] = useState('betweenness_800') // betweenness metric to display
   const [networkData, setNetworkData] = useState(null)
   const [pedestrianData, setPedestrianData] = useState(null)
   const [cyclingData, setCyclingData] = useState(null)
@@ -62,6 +86,40 @@ const UnifiedDataExplorer = () => {
           fetch('/data/business/survey_data.geojson').then(r => r.json())
         ])
         
+        // Process properties data to calculate transfer_count and total_value
+        const processedProperties = {
+          ...properties,
+          features: properties.features.map(feature => {
+            const transactions = feature.properties.properties || []
+            
+            // Count transactions with valid sale prices
+            const transfer_count = transactions.filter(t => {
+              const price = t.sale_price
+              return price && price !== 'DONATION' && price !== 'CRST' && price.startsWith('R')
+            }).length
+            
+            // Calculate total value by parsing sale_price strings like "R 1 000 000"
+            const total_value = transactions.reduce((sum, t) => {
+              const price = t.sale_price
+              if (price && price !== 'DONATION' && price !== 'CRST' && price.startsWith('R')) {
+                // Remove "R " and all spaces, then parse to number
+                const numericValue = parseFloat(price.replace('R ', '').replace(/\s/g, ''))
+                return sum + (isNaN(numericValue) ? 0 : numericValue)
+              }
+              return sum
+            }, 0)
+            
+            return {
+              ...feature,
+              properties: {
+                ...feature.properties,
+                transfer_count,
+                total_value
+              }
+            }
+          })
+        }
+        
         console.log('Business data loaded:', {
           businesses: businesses.features?.length,
           stalls: stalls.features?.length,
@@ -69,9 +127,11 @@ const UnifiedDataExplorer = () => {
           survey: survey.features?.length
         })
         
+        console.log('Sample processed property:', processedProperties.features[0]?.properties)
+        
         setBusinessesData(businesses)
         setStreetStallsData(stalls)
-        setPropertiesData(properties)
+        setPropertiesData(processedProperties)
         setSurveyData(survey)
       } catch (error) {
         console.error('Error loading business data:', error)
@@ -87,11 +147,20 @@ const UnifiedDataExplorer = () => {
   useEffect(() => {
     const loadWalkabilityData = async () => {
       try {
+        // Load network data from shade dataset (has betweenness centrality)
+        const shadeFile = '/data/shade/winter/2025-06-21_0800.geojson'
+        
         const [network, pedestrian, cycling] = await Promise.all([
-          fetch('/data/walkabilty/processed/network_connectivity.geojson').then(r => r.json()),
+          fetch(shadeFile).then(r => r.json()),
           fetch('/data/walkabilty/processed/pedestrian_month_all.geojson').then(r => r.json()),
           fetch('/data/walkabilty/processed/cycling_month_all.geojson').then(r => r.json())
         ])
+        
+        console.log('Walkability data loaded:', {
+          network: network.features?.length,
+          pedestrian: pedestrian.features?.length,
+          cycling: cycling.features?.length
+        })
         
         setNetworkData(network)
         setPedestrianData(pedestrian)
@@ -157,7 +226,7 @@ const UnifiedDataExplorer = () => {
         <aside className="explorer-sidebar">
           {dashboardMode === 'business' && (
             <BusinessAnalytics
-              mode={businessMode}
+              businessMode={businessMode}
               onModeChange={setBusinessMode}
               dayOfWeek={dayOfWeek}
               hour={hour}
@@ -167,20 +236,24 @@ const UnifiedDataExplorer = () => {
               streetStallsData={streetStallsData}
               propertiesData={propertiesData}
               surveyData={surveyData}
-              visibleLayers={visibleLayers}
-              onLayerToggle={toggleLayer}
+              opinionSource={opinionSource}
+              onOpinionSourceChange={setOpinionSource}
+              amenitiesFilters={amenitiesFilters}
+              onAmenitiesFiltersChange={setAmenitiesFilters}
+              categoriesFilters={categoriesFilters}
+              onCategoriesFiltersChange={setCategoriesFilters}
             />
           )}
           
           {dashboardMode === 'walkability' && (
             <WalkabilityAnalytics
-              activityType={activityType}
-              onActivityChange={setActivityType}
-              networkData={networkData}
+              walkabilityMode={walkabilityMode}
+              onWalkabilityModeChange={setWalkabilityMode}
+              networkMetric={networkMetric}
+              onNetworkMetricChange={setNetworkMetric}
               pedestrianData={pedestrianData}
               cyclingData={cyclingData}
-              visibleLayers={visibleLayers}
-              onLayerToggle={toggleLayer}
+              networkData={networkData}
             />
           )}
           
@@ -198,11 +271,13 @@ const UnifiedDataExplorer = () => {
           <ExplorerMap
             dashboardMode={dashboardMode}
             businessMode={businessMode}
-            activityType={activityType}
+            walkabilityMode={walkabilityMode}
+            networkMetric={networkMetric}
             dayOfWeek={dayOfWeek}
             hour={hour}
             businessesData={businessesData}
             streetStallsData={streetStallsData}
+            surveyData={surveyData}
             propertiesData={propertiesData}
             networkData={networkData}
             pedestrianData={pedestrianData}
@@ -211,6 +286,9 @@ const UnifiedDataExplorer = () => {
             lightingProjects={lightingProjects}
             visibleLayers={visibleLayers}
             onMapLoad={setMap}
+            opinionSource={opinionSource}
+            amenitiesFilters={amenitiesFilters}
+            categoriesFilters={categoriesFilters}
           />
         </main>
       </div>

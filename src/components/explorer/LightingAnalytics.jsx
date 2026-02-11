@@ -228,15 +228,6 @@ const LightingAnalytics = ({
             />
             <span>Lighting Projects</span>
           </label>
-          
-          <label className="layer-toggle">
-            <input
-              type="checkbox"
-              checked={visibleLayers.lightIntensity}
-              onChange={() => onLayerToggle('lightIntensity')}
-            />
-            <span>Light Intensity Heatmap</span>
-          </label>
         </div>
       </div>
       

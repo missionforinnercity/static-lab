@@ -4,8 +4,7 @@ import './LightingAnalytics.css'
 const LightingAnalytics = ({
   segmentsData,
   projectsData,
-  visibleLayers,
-  onLayerToggle
+  hideLayerControls = false
 }) => {
   const [stats, setStats] = useState(null)
   const [categoryStats, setCategoryStats] = useState(null)
@@ -207,53 +206,55 @@ const LightingAnalytics = ({
         )}
       </div>
       
-      {/* Layer Controls */}
-      <div className="layer-controls">
-        <h4>Visible Layers</h4>
-        <div className="layer-toggles">
-          <label className="layer-toggle">
-            <input
-              type="checkbox"
-              checked={visibleLayers.lightingSegments}
-              onChange={() => onLayerToggle('lightingSegments')}
-            />
-            <span>Street Segments</span>
-          </label>
-          
-          <label className="layer-toggle">
-            <input
-              type="checkbox"
-              checked={visibleLayers.lightingProjects}
-              onChange={() => onLayerToggle('lightingProjects')}
-            />
-            <span>Lighting Projects</span>
-          </label>
+      {/* Layer Controls - hidden when using category selector */}
+      {!hideLayerControls && (
+        <div className="layer-controls">
+          <h4>Visible Layers</h4>
+          <div className="layer-toggles">
+            <label className="layer-toggle">
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => {}}
+              />
+              <span>Street Segments</span>
+            </label>
+            
+            <label className="layer-toggle">
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => {}}
+              />
+              <span>Street Lights</span>
+            </label>
+          </div>
         </div>
-      </div>
+      )}
       
       {/* Legend */}
       <div className="legend-section">
-        <h4>Lighting Quality</h4>
+        <h4>Lighting Quality (Kelvin Temperature)</h4>
         <div className="legend-items">
           <div className="legend-item">
-            <div className="legend-color" style={{ background: '#991b1b' }}></div>
-            <span>Dark (&lt;10 lux)</span>
+            <div className="legend-color" style={{ background: '#7f1d1d' }}></div>
+            <span>Very Dark (&lt;10 lux)</span>
           </div>
           <div className="legend-item">
-            <div className="legend-color" style={{ background: '#dc2626' }}></div>
-            <span>Low (10-30)</span>
+            <div className="legend-color" style={{ background: '#ff6b35' }}></div>
+            <span>Low - Warm (10-30) ~2700K</span>
           </div>
           <div className="legend-item">
-            <div className="legend-color" style={{ background: '#f59e0b' }}></div>
-            <span>Moderate (30-75)</span>
+            <div className="legend-color" style={{ background: '#ffa500' }}></div>
+            <span>Moderate - Amber (30-75) ~3000K</span>
           </div>
           <div className="legend-item">
-            <div className="legend-color" style={{ background: '#10b981' }}></div>
-            <span>Well Lit (75-120)</span>
+            <div className="legend-color" style={{ background: '#ffd700' }}></div>
+            <span>Well Lit - Golden (75-120) ~4000K</span>
           </div>
           <div className="legend-item">
-            <div className="legend-color" style={{ background: '#3b82f6' }}></div>
-            <span>Excellent (&gt;120)</span>
+            <div className="legend-color" style={{ background: '#f0f8ff' }}></div>
+            <span>Excellent - Cool (&gt;120) ~5000K+</span>
           </div>
         </div>
       </div>

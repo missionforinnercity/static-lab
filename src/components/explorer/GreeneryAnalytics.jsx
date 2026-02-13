@@ -6,8 +6,7 @@ const GreeneryAnalytics = ({
   greeneryAndSkyview,
   treeCanopyData,
   parksData,
-  visibleLayers,
-  onLayerToggle
+  hideLayerControls = false
 }) => {
   const [stats, setStats] = useState(null)
   const [categoryStats, setCategoryStats] = useState(null)
@@ -200,36 +199,38 @@ const GreeneryAnalytics = ({
         </div>
       )}
       
-      {/* Layer Controls */}
-      <div className="layer-controls">
-        <h4>Visible Layers</h4>
-        <div className="layer-toggles">
-          <label className="layer-toggle">
-            <input
-              type="checkbox"
-              checked={visibleLayers.greenerySegments}
-              onChange={() => onLayerToggle('greenerySegments')}
-            />
-            <span>Greenery & Sky View Factor</span>
-          </label>
-          <label className="layer-toggle">
-            <input
-              type="checkbox"
-              checked={visibleLayers.treeCanopy}
-              onChange={() => onLayerToggle('treeCanopy')}
-            />
-            <span>Tree Canopy</span>
-          </label>
-          <label className="layer-toggle">
-            <input
-              type="checkbox"
-              checked={visibleLayers.parksNearby}
-              onChange={() => onLayerToggle('parksNearby')}
-            />
-            <span>Parks Nearby</span>
-          </label>
+      {/* Layer Controls - hidden when using category selector */}
+      {!hideLayerControls && (
+        <div className="layer-controls">
+          <h4>Visible Layers</h4>
+          <div className="layer-toggles">
+            <label className="layer-toggle">
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => {}}
+              />
+              <span>Greenery & Sky View Factor</span>
+            </label>
+            <label className="layer-toggle">
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => {}}
+              />
+              <span>Tree Canopy</span>
+            </label>
+            <label className="layer-toggle">
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => {}}
+              />
+              <span>Parks Nearby</span>
+            </label>
+          </div>
         </div>
-      </div>
+      )}
       
       {/* Legend */}
       <div className="legend-section">

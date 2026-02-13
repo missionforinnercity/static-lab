@@ -30,6 +30,8 @@ const ExplorerMap = ({
   treeCanopyData,
   parksData,
   visibleLayers,
+  layerStack = [],
+  activeCategory,
   onMapLoad,
   opinionSource,
   amenitiesFilters,
@@ -38,6 +40,37 @@ const ExplorerMap = ({
   onSegmentSelect
 }) => {
   const mapRef = useRef()
+  
+  // Helper function to check if a category should be rendered
+  const shouldRenderCategory = (categoryId) => {
+    // Check if this category is in the layer stack (either as active or locked)
+    return layerStack.some(layer => layer.id === categoryId) || activeCategory === categoryId
+  }
+  
+  // Helper function to get business name from displayName (which might be JSON string)
+  const getBusinessName = (properties) => {
+    if (!properties) return 'Business'
+    
+    // Try displayName first
+    let displayName = properties.displayName
+    
+    // If displayName is a string, try to parse it as JSON
+    if (typeof displayName === 'string') {
+      try {
+        displayName = JSON.parse(displayName)
+      } catch (e) {
+        // If parsing fails, use it as is
+      }
+    }
+    
+    // Extract text from displayName object
+    if (displayName && typeof displayName === 'object' && displayName.text) {
+      return displayName.text
+    }
+    
+    // Fallbacks
+    return displayName || properties.name || 'Business'
+  }
   const [viewState, setViewState] = useState({
     longitude: 18.4241,
     latitude: -33.9249,
@@ -122,10 +155,9 @@ const ExplorerMap = ({
         onClick={handleMapClick}
       >
         {/* Business Dashboard Layers */}
-        {dashboardMode === 'business' && (
-          <>
-            {/* Business Liveliness - Heatmap */}
-            {businessMode === 'liveliness' && filteredBusinesses && (
+        <>
+          {/* Business Liveliness - Heatmap */}
+          {shouldRenderCategory('businessLiveliness') && filteredBusinesses && (
               <Source
                 id="businesses-heatmap"
                 type="geojson"
@@ -179,9 +211,10 @@ const ExplorerMap = ({
                 />
               </Source>
             )}
-            
-            {/* Vendor Opinions - Consented vendors only */}
-            {businessMode === 'opinions' && (
+          </>
+          
+          {/* Vendor Opinions - Consented vendors only */}
+          {shouldRenderCategory('vendorOpinions') && (
               <>
                 {(opinionSource === 'formal' || opinionSource === 'both') && surveyData && (() => {
                   const consentedSurvey = {
@@ -272,7 +305,7 @@ const ExplorerMap = ({
             )}
             
             {/* Review Ratings - Bubble chart */}
-            {businessMode === 'ratings' && businessesData && (
+            {shouldRenderCategory('businessRatings') && businessesData && (
               <Source
                 id="businesses-ratings"
                 type="geojson"
@@ -316,7 +349,7 @@ const ExplorerMap = ({
             )}
             
             {/* Amenities Mode */}
-            {businessMode === 'amenities' && businessesData && (() => {
+            {shouldRenderCategory('amenities') && businessesData && (() => {
               // Filter businesses based on selected amenities
               const hasActiveFilters = Object.values(amenitiesFilters || {}).some(v => v)
               const filtered = hasActiveFilters ? {
@@ -354,7 +387,7 @@ const ExplorerMap = ({
             })()}
             
             {/* Categories Mode */}
-            {businessMode === 'categories' && businessesData && (() => {
+            {shouldRenderCategory('businessCategories') && businessesData && (() => {
               // Filter businesses based on selected categories
               const hasActiveFilters = Object.values(categoriesFilters || {}).some(v => v)
               const filtered = hasActiveFilters ? {
@@ -403,7 +436,7 @@ const ExplorerMap = ({
             })()}
             
             {/* Property Sales - Bubble chart */}
-            {businessMode === 'property' && propertiesData && (
+            {shouldRenderCategory('propertySales') && propertiesData && (
               <Source
                 id="properties-sales"
                 type="geojson"
@@ -443,14 +476,10 @@ const ExplorerMap = ({
                 />
               </Source>
             )}
-          </>
-        )}
         
-        {/* Walkability Dashboard Layers */}
-        {dashboardMode === 'walkability' && (
-          <>
-            {/* Pedestrian Routes */}
-            {walkabilityMode === 'pedestrian' && pedestrianData && (
+        {/* Walkability Layers */}
+        {/* Pedestrian Routes */}
+        {shouldRenderCategory('pedestrianRoutes') && pedestrianData && (
               <Source
                 id="pedestrian-routes"
                 type="geojson"
@@ -485,46 +514,46 @@ const ExplorerMap = ({
                 />
               </Source>
             )}
-            
-            {/* Cycling Routes */}
-            {walkabilityMode === 'cycling' && cyclingData && (
-              <Source
-                id="cycling-routes"
-                type="geojson"
-                data={cyclingData}
-              >
-                <Layer
-                  id="cycling-routes-layer"
-                  type="line"
-                  paint={{
-                    'line-color': [
-                      'interpolate',
-                      ['linear'],
-                      ['coalesce', ['get', 'total_trip_count'], 0],
-                      0, '#d1fae5',
-                      50, '#6ee7b7',
-                      100, '#34d399',
-                      200, '#10b981',
-                      400, '#059669',
-                      800, '#047857',
-                      1500, '#065f46'
-                    ],
-                    'line-width': [
-                      'interpolate',
-                      ['linear'],
-                      ['zoom'],
-                      13, 2,
-                      16, 4,
-                      18, 6
-                    ],
-                    'line-opacity': 0.8
-                  }}
-                />
-              </Source>
-            )}
-            
-            {/* Network Analysis - Betweenness Centrality */}
-            {walkabilityMode === 'network' && networkData && (() => {
+        
+        {/* Cycling Routes */}
+        {shouldRenderCategory('cyclingRoutes') && cyclingData && (
+          <Source
+            id="cycling-routes"
+            type="geojson"
+            data={cyclingData}
+          >
+            <Layer
+              id="cycling-routes-layer"
+              type="line"
+              paint={{
+                'line-color': [
+                  'interpolate',
+                  ['linear'],
+                  ['coalesce', ['get', 'total_trip_count'], 0],
+                  0, '#d1fae5',
+                  50, '#6ee7b7',
+                  100, '#34d399',
+                  200, '#10b981',
+                  400, '#059669',
+                  800, '#047857',
+                  1500, '#065f46'
+                ],
+                'line-width': [
+                  'interpolate',
+                  ['linear'],
+                  ['zoom'],
+                  13, 2,
+                  16, 4,
+                  18, 6
+                ],
+                'line-opacity': 0.8
+              }}
+            />
+          </Source>
+        )}
+        
+        {/* Network Analysis - Betweenness Centrality */}
+        {shouldRenderCategory('networkAnalysis') && networkData && (() => {
               // Get field name based on selected metric
               const metricConfig = {
                 betweenness_400: { field: 'cc_betweenness_400', scale: [0, 20, 50, 100, 200, 500, 1000] },
@@ -573,14 +602,10 @@ const ExplorerMap = ({
                 </Source>
               )
             })()}
-          </>
-        )}
         
-        {/* Lighting Dashboard Layers */}
-        {dashboardMode === 'lighting' && (
-          <>
-            {/* Lighting Segments Layer */}
-            {visibleLayers.lightingSegments && lightingSegments && (
+        {/* Lighting Layers */}
+        {/* Lighting Segments Layer */}
+        {shouldRenderCategory('streetLighting') && lightingSegments && (
               <Source
                 id="lighting-segments"
                 type="geojson"
@@ -597,11 +622,11 @@ const ExplorerMap = ({
                       [
                         'step',
                         ['get', 'mean_lux'],
-                        '#991b1b',  // Dark: 0-10 lux
-                        10, '#dc2626',  // Low: 10-30 lux
-                        30, '#f59e0b',  // Moderate: 30-75 lux
-                        75, '#10b981',  // Well Lit: 75-120 lux
-                        120, '#3b82f6'  // Excellent: 120+ lux
+                        '#7f1d1d',  // Very Dark: 0-10 lux (deep red-brown)
+                        10, '#ff6b35',  // Low: 10-30 lux (warm orange - 2700K)
+                        30, '#ffa500',  // Moderate: 30-75 lux (amber - 3000K)
+                        75, '#ffd700',  // Well Lit: 75-120 lux (golden yellow - 4000K)
+                        120, '#f0f8ff'  // Excellent: 120+ lux (cool white - 5000K+)
                       ]
                     ],
                     'line-width': 5,
@@ -612,7 +637,7 @@ const ExplorerMap = ({
             )}
             
             {/* Lighting Projects Layer */}
-            {visibleLayers.lightingProjects && lightingProjects && (
+            {shouldRenderCategory('lightingProjects') && lightingProjects && (
               <Source
                 id="lighting-projects"
                 type="geojson"
@@ -631,51 +656,43 @@ const ExplorerMap = ({
                 />
               </Source>
             )}
-          </>
+        
+        {/* Temperature Layers */}
+        {/* Surface Temperature Layer */}
+        {shouldRenderCategory('surfaceTemperature') && temperatureData && (
+          <Source
+            id="temperature-segments"
+            type="geojson"
+            data={temperatureData}
+          >
+            <Layer
+              id="temperature-segments-layer"
+              type="line"
+              paint={{
+                'line-color': [
+                  'case',
+                  ['has', 'temp_percentile'],
+                  [
+                    'step',
+                    ['get', 'temp_percentile'],
+                    '#3b82f6',  // Coolest 20% (0-20%)
+                    20, '#10b981',  // Cool (20-40%)
+                    40, '#fbbf24',  // Average (40-60%)
+                    60, '#f59e0b',  // Warm (60-80%)
+                    80, '#ef4444'   // Hottest 20% (80-100%)
+                  ],
+                  '#4b5563'
+                ],
+                'line-width': 5,
+                'line-opacity': 0.9
+              }}
+            />
+          </Source>
         )}
         
-        {/* Temperature Dashboard Layers */}
-        {dashboardMode === 'temperature' && (
-          <>
-            {/* Surface Temperature Layer */}
-            {visibleLayers.temperatureSegments && temperatureData && (
-              <Source
-                id="temperature-segments"
-                type="geojson"
-                data={temperatureData}
-              >
-                <Layer
-                  id="temperature-segments-layer"
-                  type="line"
-                  paint={{
-                    'line-color': [
-                      'case',
-                      ['has', 'temp_percentile'],
-                      [
-                        'step',
-                        ['get', 'temp_percentile'],
-                        '#3b82f6',  // Coolest 20% (0-20%)
-                        20, '#10b981',  // Cool (20-40%)
-                        40, '#fbbf24',  // Average (40-60%)
-                        60, '#f59e0b',  // Warm (60-80%)
-                        80, '#ef4444'   // Hottest 20% (80-100%)
-                      ],
-                      '#4b5563'
-                    ],
-                    'line-width': 5,
-                    'line-opacity': 0.9
-                  }}
-                />
-              </Source>
-            )}
-          </>
-        )}
-        
-        {/* Greenery Dashboard Layers */}
-        {dashboardMode === 'greenery' && (
-          <>
-            {/* Greenery & Sky View Factor Layer */}
-            {visibleLayers.greenerySegments && greeneryAndSkyview && (
+        {/* Greenery Layers */}
+        {/* Greenery & Sky View Factor Layer */}
+        {shouldRenderCategory('greeneryIndex') && greeneryAndSkyview && (
               <Source
                 id="greenery-skyview-segments"
                 type="geojson"
@@ -707,7 +724,7 @@ const ExplorerMap = ({
             )}
             
             {/* Tree Canopy Layer */}
-            {visibleLayers.treeCanopy && treeCanopyData && (
+            {shouldRenderCategory('treeCanopy') && treeCanopyData && (
               <Source
                 id="tree-canopy"
                 type="geojson"
@@ -725,7 +742,7 @@ const ExplorerMap = ({
             )}
             
             {/* Parks Nearby Layer */}
-            {visibleLayers.parksNearby && parksData && (
+            {shouldRenderCategory('parksNearby') && parksData && (
               <Source
                 id="parks-nearby"
                 type="geojson"
@@ -749,8 +766,6 @@ const ExplorerMap = ({
                 />
               </Source>
             )}
-          </>
-        )}
         
         {/* Popup */}
         {popupInfo && (
@@ -768,7 +783,7 @@ const ExplorerMap = ({
                   {/* Business Liveliness Mode */}
                   {businessMode === 'liveliness' && (
                     <>
-                      <h3>{popupInfo.feature.properties.displayName?.text || popupInfo.feature.properties.name || 'Business'}</h3>
+                      <h3>{getBusinessName(popupInfo.feature.properties)}</h3>
                       {popupInfo.feature.properties.primaryType && (
                         <p><strong>Type:</strong> {popupInfo.feature.properties.primaryType.replace(/_/g, ' ')}</p>
                       )}
@@ -793,7 +808,7 @@ const ExplorerMap = ({
                   {/* Vendor Opinions Mode */}
                   {businessMode === 'opinions' && (
                     <>
-                      <h3>{popupInfo.feature.properties.displayName?.text || popupInfo.feature.properties.business_name || 'Vendor'}</h3>
+                      <h3>{getBusinessName(popupInfo.feature.properties) || popupInfo.feature.properties.business_name || 'Vendor'}</h3>
                       {popupInfo.feature.properties.stake_big_change && (
                         <p><strong>Main Challenge:</strong> {popupInfo.feature.properties.stake_big_change}</p>
                       )}
@@ -806,7 +821,7 @@ const ExplorerMap = ({
                   {/* Review Ratings Mode */}
                   {businessMode === 'ratings' && (
                     <>
-                      <h3>{popupInfo.feature.properties.displayName?.text || 'Business'}</h3>
+                      <h3>{getBusinessName(popupInfo.feature.properties)}</h3>
                       {popupInfo.feature.properties.rating && (
                         <p><strong>Rating:</strong> {popupInfo.feature.properties.rating} ⭐</p>
                       )}
@@ -822,14 +837,23 @@ const ExplorerMap = ({
                   {/* Amenities Mode */}
                   {businessMode === 'amenities' && (
                     <>
-                      <h3>{popupInfo.feature.properties.displayName?.text || 'Business'}</h3>
-                      <div style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                        {popupInfo.feature.properties.allowsDogs && <p>🐕 Dog Friendly</p>}
-                        {popupInfo.feature.properties.servesBeer && <p>🍺 Serves Beer</p>}
-                        {popupInfo.feature.properties.servesWine && <p>🍷 Serves Wine</p>}
-                        {popupInfo.feature.properties.servesCoffee && <p>☕ Serves Coffee</p>}
-                        {popupInfo.feature.properties.outdoorSeating && <p>🌳 Outdoor Seating</p>}
-                        {popupInfo.feature.properties.liveMusic && <p>🎵 Live Music</p>}
+                      <h3>{getBusinessName(popupInfo.feature.properties)}</h3>
+                      {popupInfo.feature.properties.primaryType && (
+                        <p><strong>Type:</strong> {popupInfo.feature.properties.primaryType.replace(/_/g, ' ')}</p>
+                      )}
+                      <div style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                        <strong>Amenities:</strong>
+                        <div style={{ marginTop: '0.25rem' }}>
+                          {popupInfo.feature.properties.allowsDogs && <p style={{ margin: '0.25rem 0' }}>🐕 Dog Friendly</p>}
+                          {popupInfo.feature.properties.servesBeer && <p style={{ margin: '0.25rem 0' }}>🍺 Serves Beer</p>}
+                          {popupInfo.feature.properties.servesWine && <p style={{ margin: '0.25rem 0' }}>🍷 Serves Wine</p>}
+                          {popupInfo.feature.properties.servesCoffee && <p style={{ margin: '0.25rem 0' }}>☕ Serves Coffee</p>}
+                          {popupInfo.feature.properties.outdoorSeating && <p style={{ margin: '0.25rem 0' }}>🌳 Outdoor Seating</p>}
+                          {popupInfo.feature.properties.liveMusic && <p style={{ margin: '0.25rem 0' }}>🎵 Live Music</p>}
+                          {!popupInfo.feature.properties.allowsDogs && !popupInfo.feature.properties.servesBeer && !popupInfo.feature.properties.servesWine && !popupInfo.feature.properties.servesCoffee && !popupInfo.feature.properties.outdoorSeating && !popupInfo.feature.properties.liveMusic && (
+                            <p style={{ margin: '0.25rem 0', color: '#999' }}>No special amenities listed</p>
+                          )}
+                        </div>
                       </div>
                     </>
                   )}
@@ -837,7 +861,7 @@ const ExplorerMap = ({
                   {/* Categories Mode */}
                   {businessMode === 'categories' && (
                     <>
-                      <h3>{popupInfo.feature.properties.displayName?.text || 'Business'}</h3>
+                      <h3>{getBusinessName(popupInfo.feature.properties)}</h3>
                       {popupInfo.feature.properties.primaryType && (
                         <p><strong>Category:</strong> {popupInfo.feature.properties.primaryType.replace(/_/g, ' ')}</p>
                       )}

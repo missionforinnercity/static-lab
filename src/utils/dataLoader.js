@@ -43,10 +43,10 @@ export async function loadBusinessData() {
 
 export async function loadWalkabilityData() {
   const [network, pedestrian, cycling, peakStats] = await Promise.all([
-    fetch('/data/processed/walkabilty/network_connectivity.geojson').then(r => r.json()),
-    fetch('/data/processed/walkabilty/pedestrian_month_all.geojson').then(r => r.json()),
-    fetch('/data/processed/walkabilty/cycling_month_all.geojson').then(r => r.json()),
-    fetch('/data/processed/walkabilty/peak_statistics.json').then(r => r.json())
+    fetch('/data/processed/walkability/network_connectivity.geojson').then(r => r.json()),
+    fetch('/data/processed/walkability/pedestrian_month_all.geojson').then(r => r.json()),
+    fetch('/data/processed/walkability/cycling_month_all.geojson').then(r => r.json()),
+    fetch('/data/processed/walkability/peak_statistics.json').then(r => r.json())
   ])
   
   return { 

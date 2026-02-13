@@ -19,7 +19,8 @@ const BusinessAnalytics = ({
   amenitiesFilters: amenitiesFiltersProps,
   onAmenitiesFiltersChange,
   categoriesFilters,
-  onCategoriesFiltersChange
+  onCategoriesFiltersChange,
+  hideLayerControls = false
 }) => {
   const [businessStats, setBusinessStats] = useState(null)
   const [opinionStats, setOpinionStats] = useState(null)
@@ -74,7 +75,8 @@ const BusinessAnalytics = ({
         <p className="header-subtitle">Explore business patterns and insights</p>
       </div>
       
-      {/* Mode Selector with Radio Buttons */}
+      {/* Mode Selector with Radio Buttons - hidden when using category selector */}
+      {!hideLayerControls && (
       <div className="mode-selector-radio">
         <label className="mode-radio">
           <input
@@ -136,6 +138,48 @@ const BusinessAnalytics = ({
           <span>Property Sales</span>
         </label>
       </div>
+      )}
+      
+      {/* Layer Controls - hidden when using category selector */}
+      {!hideLayerControls && (
+        <div className="layer-controls">
+          <h4>Map Layers</h4>
+          <div className="layer-toggles">
+            <div className="layer-toggle-item">
+              <label className="layer-toggle">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => {}}
+                />
+                <span>Businesses</span>
+              </label>
+            </div>
+            
+            <div className="layer-toggle-item">
+              <label className="layer-toggle">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => {}}
+                />
+                <span>Street Stalls</span>
+              </label>
+            </div>
+            
+            <div className="layer-toggle-item">
+              <label className="layer-toggle">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => {}}
+                />
+                <span>Properties</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Business Liveliness Mode */}
       {businessMode === 'liveliness' && (

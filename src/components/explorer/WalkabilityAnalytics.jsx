@@ -17,7 +17,8 @@ const WalkabilityAnalytics = ({
   onNetworkMetricChange,
   pedestrianData,
   cyclingData,
-  networkData
+  networkData,
+  hideLayerControls = false
 }) => {
   const [stats, setStats] = useState(null)
   
@@ -81,7 +82,8 @@ const WalkabilityAnalytics = ({
         <p className="header-subtitle">Street network usage patterns</p>
       </div>
       
-      {/* Mode Selector */}
+      {/* Mode Selector - hidden when using category selector */}
+      {!hideLayerControls && (
       <div className="mode-selector">
         <label className="mode-radio">
           <input
@@ -116,6 +118,7 @@ const WalkabilityAnalytics = ({
           <span className="radio-label">🔗 Network Analysis</span>
         </label>
       </div>
+      )}
       
       {/* Pedestrian Mode */}
       {walkabilityMode === 'pedestrian' && (

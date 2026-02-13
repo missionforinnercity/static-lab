@@ -80,6 +80,30 @@ const DASHBOARD_MODES = [
   { id: 'greenery', label: 'Greenery', icon: '🌳' }
 ]
 
+// All available layer categories - these are what users click to view
+const LAYER_CATEGORIES = [
+  // Business layers
+  { id: 'businessLiveliness', label: 'Business Liveliness', dashboard: 'business', icon: '🏪', dataKey: 'businesses' },
+  { id: 'vendorOpinions', label: 'Vendor Opinions', dashboard: 'business', icon: '💬', dataKey: 'streetStalls' },
+  { id: 'businessRatings', label: 'Business Ratings', dashboard: 'business', icon: '⭐', dataKey: 'businesses' },
+  { id: 'amenities', label: 'Amenities', dashboard: 'business', icon: '🏷️', dataKey: 'businesses' },
+  { id: 'businessCategories', label: 'Business Categories', dashboard: 'business', icon: '📊', dataKey: 'businesses' },
+  { id: 'propertySales', label: 'Property Sales', dashboard: 'business', icon: '🏠', dataKey: 'properties' },
+  // Walkability layers
+  { id: 'pedestrianRoutes', label: 'Pedestrian Routes', dashboard: 'walkability', icon: '🚶', dataKey: 'pedestrianActivity' },
+  { id: 'cyclingRoutes', label: 'Cycling Routes', dashboard: 'walkability', icon: '🚴', dataKey: 'cyclingActivity' },
+  { id: 'networkAnalysis', label: 'Network Analysis', dashboard: 'walkability', icon: '🔗', dataKey: 'network' },
+  // Lighting layers
+  { id: 'streetLighting', label: 'Street Lighting', dashboard: 'lighting', icon: '💡', dataKey: 'lightingSegments' },
+  { id: 'lightingProjects', label: 'Municipal Street Lights', dashboard: 'lighting', icon: '🔧', dataKey: 'lightingProjects' },
+  // Temperature layers
+  { id: 'surfaceTemperature', label: 'Surface Temperature', dashboard: 'temperature', icon: '🌡️', dataKey: 'temperatureSegments' },
+  // Greenery layers
+  { id: 'greeneryIndex', label: 'Greenery Index', dashboard: 'greenery', icon: '🌿', dataKey: 'greenerySegments' },
+  { id: 'treeCanopy', label: 'Tree Canopy', dashboard: 'greenery', icon: '🌳', dataKey: 'treeCanopy' },
+  { id: 'parksNearby', label: 'Parks Nearby', dashboard: 'greenery', icon: '🏞️', dataKey: 'parksNearby' }
+]
+
 const UnifiedDataExplorer = () => {
   const [dashboardMode, setDashboardMode] = useState('business')
   const [map, setMap] = useState(null)
@@ -145,11 +169,11 @@ const UnifiedDataExplorer = () => {
   // Layer visibility
   const [visibleLayers, setVisibleLayers] = useState({
     // Business layers
-    businesses: true,
+    businesses: false,
     streetStalls: false,
     properties: false,
     // Walkability layers
-    network: true,
+    network: false,
     pedestrianActivity: false,
     cyclingActivity: false,
     // Lighting layers
@@ -163,6 +187,15 @@ const UnifiedDataExplorer = () => {
     treeCanopy: false,
     parksNearby: false
   })
+  
+  // Active layer stack - shows what's currently on the map
+  const [layerStack, setLayerStack] = useState([])
+  
+  // Track which layers are locked (persist when clicking other categories)
+  const [lockedLayers, setLockedLayers] = useState(new Set())
+  
+  // Currently selected category (for highlighting in sidebar)
+  const [activeCategory, setActiveCategory] = useState(null)
   
   // Load business data
   useEffect(() => {
@@ -227,22 +260,39 @@ const UnifiedDataExplorer = () => {
       }
     }
     
-    if (dashboardMode === 'business') {
+    // Load business data when dashboard is business OR when any business layer is locked
+    const hasLockedBusinessLayer = ['businessLiveliness', 'vendorOpinions', 'businessRatings', 'amenities', 'businessCategories', 'propertySales'].some(id => lockedLayers.has(id))
+    if (dashboardMode === 'business' || hasLockedBusinessLayer) {
       loadBusinessData()
     }
-  }, [dashboardMode])
+  }, [dashboardMode, lockedLayers])
   
   // Load walkability data
   useEffect(() => {
     const loadWalkabilityData = async () => {
       try {
         // Load network data from shade dataset (has betweenness centrality)
-        const shadeFile = '/data/shade/winter/2025-06-21_0800.geojson'
+        const shadeFile = '/data/processed/shade/winter/2025-06-21_0800.geojson'
+        
+        console.log('Loading walkability files from:', {
+          shade: shadeFile,
+          pedestrian: '/data/processed/walkability/pedestrian_month_all.geojson',
+          cycling: '/data/processed/walkability/cycling_month_all.geojson'
+        })
         
         const [network, pedestrian, cycling] = await Promise.all([
-          fetch(shadeFile).then(r => r.json()),
-          fetch('/data/walkabilty/processed/pedestrian_month_all.geojson').then(r => r.json()),
-          fetch('/data/walkabilty/processed/cycling_month_all.geojson').then(r => r.json())
+          fetch(shadeFile).then(async r => {
+            if (!r.ok) throw new Error(`Shade file failed: ${r.status} ${r.statusText}`)
+            return r.json()
+          }),
+          fetch('/data/processed/walkability/pedestrian_month_all.geojson').then(async r => {
+            if (!r.ok) throw new Error(`Pedestrian file failed: ${r.status} ${r.statusText}`)
+            return r.json()
+          }),
+          fetch('/data/processed/walkability/cycling_month_all.geojson').then(async r => {
+            if (!r.ok) throw new Error(`Cycling file failed: ${r.status} ${r.statusText}`)
+            return r.json()
+          })
         ])
         
         console.log('Walkability data loaded:', {
@@ -259,10 +309,12 @@ const UnifiedDataExplorer = () => {
       }
     }
     
-    if (dashboardMode === 'walkability') {
+    // Load walkability data when dashboard is walkability OR when any walkability layer is locked
+    const hasLockedWalkabilityLayer = ['pedestrianRoutes', 'cyclingRoutes', 'networkAnalysis'].some(id => lockedLayers.has(id))
+    if (dashboardMode === 'walkability' || hasLockedWalkabilityLayer) {
       loadWalkabilityData()
     }
-  }, [dashboardMode])
+  }, [dashboardMode, lockedLayers])
   
   // Load lighting data
   useEffect(() => {
@@ -281,10 +333,12 @@ const UnifiedDataExplorer = () => {
       }
     }
     
-    if (dashboardMode === 'lighting') {
+    // Load lighting data when dashboard is lighting OR when any lighting layer is locked
+    const hasLockedLightingLayer = ['streetLighting', 'lightingProjects'].some(id => lockedLayers.has(id))
+    if (dashboardMode === 'lighting' || hasLockedLightingLayer) {
       loadLightingData()
     }
-  }, [dashboardMode])
+  }, [dashboardMode, lockedLayers])
   
   // Load temperature data
   useEffect(() => {
@@ -355,10 +409,12 @@ const UnifiedDataExplorer = () => {
       }
     }
     
-    if (dashboardMode === 'temperature') {
+    // Load temperature data when dashboard is temperature OR when the temperature layer is locked
+    const hasLockedTempLayer = lockedLayers.has('surfaceTemperature')
+    if (dashboardMode === 'temperature' || hasLockedTempLayer) {
       loadTemperatureData()
     }
-  }, [dashboardMode])
+  }, [dashboardMode, lockedLayers])
   
   // Load shade/greenery data
   useEffect(() => {
@@ -373,7 +429,7 @@ const UnifiedDataExplorer = () => {
         }
         
         const date = seasonDates[season] || '2024-12-21'
-        const response = await fetch(`/data/shade/${season}/${date}_${timeOfDay}.geojson`)
+        const response = await fetch(`/data/processed/shade/${season}/${date}_${timeOfDay}.geojson`)
         const data = await response.json()
         setShadeData(data)
         console.log(`Loaded shade data: ${season} ${date} ${timeOfDay}`)
@@ -408,26 +464,147 @@ const UnifiedDataExplorer = () => {
       }
     }
     
-    if (dashboardMode === 'greenery') {
+    // Load greenery data when dashboard is greenery OR when any greenery layer is locked
+    const hasLockedGreeneryLayer = ['greeneryIndex', 'treeCanopy', 'parksNearby'].some(id => lockedLayers.has(id))
+    if (dashboardMode === 'greenery' || hasLockedGreeneryLayer) {
       loadShadeData()
       loadGreeneryData()
     }
-  }, [dashboardMode, season, timeOfDay])
+  }, [dashboardMode, season, timeOfDay, lockedLayers])
   
-  // Auto-enable appropriate layers when switching dashboard modes
-  useEffect(() => {
-    if (dashboardMode === 'temperature') {
-      setVisibleLayers(prev => ({ ...prev, temperatureSegments: true }))
-    } else if (dashboardMode === 'greenery') {
-      setVisibleLayers(prev => ({ ...prev, greenerySegments: true }))
+  // Select a layer category - this is the main interaction
+  const selectCategory = (categoryId) => {
+    const category = LAYER_CATEGORIES.find(c => c.id === categoryId)
+    if (!category) return
+    
+    // Set the active category
+    setActiveCategory(categoryId)
+    
+    // Get all dataKeys that are locked (from locked categoryIds)
+    const lockedDataKeys = new Set(
+      LAYER_CATEGORIES
+        .filter(c => lockedLayers.has(c.id))
+        .map(c => c.dataKey)
+    )
+    
+    // Update visible layers: turn off all layers except locked ones, turn on the selected one
+    setVisibleLayers(prev => {
+      const updated = { ...prev }
+      
+      // Turn off all layers that aren't locked
+      Object.keys(updated).forEach(dataKey => {
+        if (!lockedDataKeys.has(dataKey)) {
+          updated[dataKey] = false
+        }
+      })
+      
+      // Turn on the selected layer's data key
+      updated[category.dataKey] = true
+      
+      return updated
+    })
+    
+    // Update stack: remove unlocked items, add the new one
+    setLayerStack(prev => {
+      // Keep only locked items
+      const lockedItems = prev.filter(item => lockedLayers.has(item.id))
+      
+      // Check if this category is already in the stack
+      const existingIndex = lockedItems.findIndex(item => item.id === categoryId)
+      if (existingIndex >= 0) {
+        return lockedItems
+      }
+      
+      // Add the new category to the stack
+      return [...lockedItems, {
+        id: categoryId,
+        label: category.label,
+        icon: category.icon,
+        dataKey: category.dataKey,
+        dashboard: category.dashboard,
+        locked: false
+      }]
+    })
+    
+    // Also set the businessMode/walkabilityMode for the sidebar content
+    if (category.dashboard === 'business') {
+      const modeMap = {
+        businessLiveliness: 'liveliness',
+        vendorOpinions: 'opinions',
+        businessRatings: 'ratings',
+        amenities: 'amenities',
+        businessCategories: 'categories',
+        propertySales: 'property'
+      }
+      if (modeMap[categoryId]) {
+        setBusinessMode(modeMap[categoryId])
+      }
+    } else if (category.dashboard === 'walkability') {
+      const modeMap = {
+        pedestrianRoutes: 'pedestrian',
+        cyclingRoutes: 'cycling',
+        networkAnalysis: 'network'
+      }
+      if (modeMap[categoryId]) {
+        setWalkabilityMode(modeMap[categoryId])
+      }
     }
-  }, [dashboardMode])
+    
+    // Switch to the appropriate dashboard
+    setDashboardMode(category.dashboard)
+  }
   
-  const toggleLayer = (layerId) => {
-    setVisibleLayers(prev => ({
-      ...prev,
-      [layerId]: !prev[layerId]
-    }))
+  // Toggle lock on a layer in the stack
+  const toggleLayerLock = (categoryId) => {
+    const newLockedLayers = new Set(lockedLayers)
+    const isNowLocked = !newLockedLayers.has(categoryId)
+    
+    if (isNowLocked) {
+      newLockedLayers.add(categoryId)
+    } else {
+      newLockedLayers.delete(categoryId)
+    }
+    
+    setLockedLayers(newLockedLayers)
+    
+    // Update the locked property in the stack
+    setLayerStack(prev => prev.map(item => 
+      item.id === categoryId ? { ...item, locked: isNowLocked } : item
+    ))
+  }
+  
+  // Remove a layer from the stack
+  const removeFromStack = (categoryId) => {
+    const category = LAYER_CATEGORIES.find(c => c.id === categoryId)
+    
+    // Remove from locked set
+    const newLockedLayers = new Set(lockedLayers)
+    newLockedLayers.delete(categoryId)
+    setLockedLayers(newLockedLayers)
+    
+    // Remove from stack
+    setLayerStack(prev => prev.filter(item => item.id !== categoryId))
+    
+    // Turn off the layer if it's the one being removed
+    if (category) {
+      setVisibleLayers(prev => ({
+        ...prev,
+        [category.dataKey]: false
+      }))
+    }
+  }
+  
+  // Move layer in stack (for reordering)
+  const moveLayerInStack = (fromIndex, toIndex) => {
+    const newStack = [...layerStack]
+    const [moved] = newStack.splice(fromIndex, 1)
+    newStack.splice(toIndex, 0, moved)
+    setLayerStack(newStack)
+  }
+  
+  // Get categories for current dashboard
+  const getCurrentDashboardCategories = () => {
+    return LAYER_CATEGORIES.filter(c => c.dashboard === dashboardMode)
   }
   
   return (
@@ -450,10 +627,41 @@ const UnifiedDataExplorer = () => {
       
       <div className="explorer-content">
         <aside className="explorer-sidebar">
+          {/* Category Selector - Always visible */}
+          <div className="category-selector">
+            <h3>Data Layers</h3>
+            {getCurrentDashboardCategories().map(category => (
+              <button
+                key={category.id}
+                className={`category-btn ${activeCategory === category.id ? 'active' : ''}`}
+                onClick={() => selectCategory(category.id)}
+              >
+                <span className="category-dot"></span>
+                <span className="category-icon">{category.icon}</span>
+                <span className="category-label">{category.label}</span>
+              </button>
+            ))}
+          </div>
+          
+          {/* Dashboard-specific content */}
           {dashboardMode === 'business' && (
             <BusinessAnalytics
               businessMode={businessMode}
-              onModeChange={setBusinessMode}
+              onModeChange={(mode) => {
+                setBusinessMode(mode)
+                // Map business mode back to category
+                const categoryMap = {
+                  liveliness: 'businessLiveliness',
+                  opinions: 'vendorOpinions',
+                  ratings: 'businessRatings',
+                  amenities: 'amenities',
+                  categories: 'businessCategories',
+                  property: 'propertySales'
+                }
+                if (categoryMap[mode]) {
+                  selectCategory(categoryMap[mode])
+                }
+              }}
               dayOfWeek={dayOfWeek}
               hour={hour}
               onDayChange={setDayOfWeek}
@@ -468,18 +676,31 @@ const UnifiedDataExplorer = () => {
               onAmenitiesFiltersChange={setAmenitiesFilters}
               categoriesFilters={categoriesFilters}
               onCategoriesFiltersChange={setCategoriesFilters}
+              hideLayerControls={true}
             />
           )}
           
           {dashboardMode === 'walkability' && (
             <WalkabilityAnalytics
               walkabilityMode={walkabilityMode}
-              onWalkabilityModeChange={setWalkabilityMode}
+              onWalkabilityModeChange={(mode) => {
+                setWalkabilityMode(mode)
+                // Map walkability mode back to category
+                const categoryMap = {
+                  pedestrian: 'pedestrianRoutes',
+                  cycling: 'cyclingRoutes',
+                  network: 'networkAnalysis'
+                }
+                if (categoryMap[mode]) {
+                  selectCategory(categoryMap[mode])
+                }
+              }}
               networkMetric={networkMetric}
               onNetworkMetricChange={setNetworkMetric}
               pedestrianData={pedestrianData}
               cyclingData={cyclingData}
               networkData={networkData}
+              hideLayerControls={true}
             />
           )}
           
@@ -487,16 +708,14 @@ const UnifiedDataExplorer = () => {
             <LightingAnalytics
               segmentsData={lightingSegments}
               projectsData={lightingProjects}
-              visibleLayers={visibleLayers}
-              onLayerToggle={toggleLayer}
+              hideLayerControls={true}
             />
           )}
           
           {dashboardMode === 'temperature' && (
             <TemperatureAnalytics
               temperatureData={temperatureData}
-              visibleLayers={visibleLayers}
-              onLayerToggle={toggleLayer}
+              hideLayerControls={true}
             />
           )}
           
@@ -506,8 +725,7 @@ const UnifiedDataExplorer = () => {
               greeneryAndSkyview={greeneryAndSkyview}
               treeCanopyData={treeCanopyData}
               parksData={parksData}
-              visibleLayers={visibleLayers}
-              onLayerToggle={toggleLayer}
+              hideLayerControls={true}
             />
           )}
         </aside>
@@ -536,6 +754,8 @@ const UnifiedDataExplorer = () => {
             treeCanopyData={treeCanopyData}
             parksData={parksData}
             visibleLayers={visibleLayers}
+            layerStack={layerStack}
+            activeCategory={activeCategory}
             onMapLoad={setMap}
             opinionSource={opinionSource}
             amenitiesFilters={amenitiesFilters}
@@ -640,6 +860,50 @@ const UnifiedDataExplorer = () => {
             </div>
           )}
         </main>
+        
+        {/* Persistent Layer Stack UI */}
+        {layerStack.length > 0 && (
+          <div className="persistent-layer-stack">
+            <h4>📍 Map Layers</h4>
+            <p className="stack-hint">Top layers render above · Drag to reorder</p>
+            <div className="layer-stack-items">
+              {layerStack.map((layer, index) => (
+                <div 
+                  key={layer.id} 
+                  className={`layer-stack-item ${layer.locked ? 'locked' : ''}`}
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData('index', index.toString())}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const fromIndex = parseInt(e.dataTransfer.getData('index'))
+                    if (fromIndex !== index) {
+                      moveLayerInStack(fromIndex, index)
+                    }
+                  }}
+                >
+                  <span className="drag-handle">⋮⋮</span>
+                  <span className="layer-icon">{layer.icon}</span>
+                  <span className="layer-label">{layer.label}</span>
+                  <button 
+                    className={`lock-btn ${layer.locked ? 'locked' : ''}`}
+                    onClick={() => toggleLayerLock(layer.id)}
+                    title={layer.locked ? 'Unlock layer' : 'Lock layer to persist'}
+                  >
+                    {layer.locked ? '🔒' : '🔓'}
+                  </button>
+                  <button 
+                    className="remove-layer-btn"
+                    onClick={() => removeFromStack(layer.id)}
+                    title="Remove layer from map"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -3,8 +3,7 @@ import './TemperatureAnalytics.css'
 
 const TemperatureAnalytics = ({
   temperatureData,
-  visibleLayers,
-  onLayerToggle
+  hideLayerControls = false
 }) => {
   const [stats, setStats] = useState(null)
   const [categoryStats, setCategoryStats] = useState(null)

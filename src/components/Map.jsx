@@ -1173,7 +1173,7 @@ const Map = ({ mode, activeLayers, temporalState, explorerFilters, selectedTour 
               </div>
               <div className="legend-item">
                 <span className="legend-line" style={{background: '#9c27b0'}}></span>
-                <span>Lighting Projects</span>
+                <span>Street Lights</span>
               </div>
             </>
           )}

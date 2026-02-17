@@ -352,10 +352,18 @@ const UnifiedDataExplorer = () => {
           trainStation: trainStation.features?.length
         })
 
-        setNetworkData(network)
-        setPedestrianData(pedestrian)
-        setCyclingData(cycling)
-        setTransitData(transit)
+        // Transform network data from EPSG:3857 to EPSG:4326
+        const transformedNetwork = transformGeoJSON(network, 'EPSG:3857', 'EPSG:4326')
+        const transformedPedestrian = transformGeoJSON(pedestrian, 'EPSG:3857', 'EPSG:4326')
+        const transformedCycling = transformGeoJSON(cycling, 'EPSG:3857', 'EPSG:4326')
+        const transformedTransit = transformGeoJSON(transit, 'EPSG:3857', 'EPSG:4326')
+
+        console.log('Transformed network data sample coordinate:', transformedNetwork.features?.[0]?.geometry?.coordinates?.[0]?.[0])
+
+        setNetworkData(transformedNetwork)
+        setPedestrianData(transformedPedestrian)
+        setCyclingData(transformedCycling)
+        setTransitData(transformedTransit)
         setBusStopsData(busStops)
         setTrainStationData(trainStation)
       } catch (error) {
@@ -537,8 +545,11 @@ const UnifiedDataExplorer = () => {
   
   // Select a layer category - this is the main interaction
   const selectCategory = (categoryId) => {
+    console.log('selectCategory called:', categoryId)
     const category = LAYER_CATEGORIES.find(c => c.id === categoryId)
     if (!category) return
+    
+    console.log('Category found:', category)
     
     // Set the active category
     setActiveCategory(categoryId)
@@ -575,17 +586,20 @@ const UnifiedDataExplorer = () => {
       // Check if this category is already in the stack
       const existingIndex = lockedItems.findIndex(item => item.id === categoryId)
       if (existingIndex >= 0) {
+        console.log('Category already in stack:', categoryId)
         return lockedItems
       }
       
       // Add the new category to the stack
-      return [...lockedItems, {
+      const newStack = [...lockedItems, {
         id: categoryId,
         label: category.label,
         dataKey: category.dataKey,
         dashboard: category.dashboard,
         locked: false
       }]
+      console.log('New layer stack:', newStack)
+      return newStack
     })
     
     // Also set the businessMode/walkabilityMode for the sidebar content

@@ -752,7 +752,12 @@ const ExplorerMap = ({
         )}
         
         {/* Network Analysis - Betweenness Centrality */}
-        {shouldRenderCategory('networkAnalysis') && networkData && (() => {
+        {(() => {
+          const shouldRender = shouldRenderCategory('networkAnalysis')
+          const hasData = !!networkData
+          console.log('Network Analysis Render Check:', { shouldRender, hasData, featuresCount: networkData?.features?.length })
+          return shouldRender && hasData
+        })() && (() => {
               // Get field name based on selected metric
               const metricConfig = {
                 betweenness_400: { field: 'cc_betweenness_400', scale: [0, 20, 50, 100, 200, 500, 1000] },

@@ -13,10 +13,21 @@ const NETWORK_METRICS = [
 
 // Network Insight Views
 const INSIGHT_VIEWS = [
-  { id: 'movement', label: 'Movement Potential' },
-  { id: 'accessibility', label: 'Accessibility Gap' },
-  { id: 'integration', label: 'Network Integration' },
-  { id: 'resilience', label: 'Street Resilience' }
+  { 
+    id: 'movement', 
+    label: 'Movement Potential',
+    description: 'Identifies key routes where pedestrian and vehicle flow intersect. High scores = prime retail locations.'
+  },
+  { 
+    id: 'accessibility', 
+    label: 'Accessibility Gap',
+    description: 'Reveals areas that are physically close but feel far due to indirect routes. Low scores = underutilized areas.'
+  },
+  { 
+    id: 'integration', 
+    label: 'Network Integration',
+    description: 'Measures how well-connected streets are, accounting for distance. High integration = resilient, walkable areas.'
+  }
 ]
 
 const WalkabilityAnalytics = ({
@@ -465,8 +476,10 @@ const networkInsights = calculateNetworkInsights()
                   else if (view.id === 'accessibility') onNetworkMetricChange(scaleToggle === '400' ? 'harmonic_400' : 'harmonic_800')
                   else if (view.id === 'integration') onNetworkMetricChange('betweenness_beta_' + scaleToggle)
                 }}
+                title={view.description}
               >
                 <span className="view-label">{view.label}</span>
+                <span className="view-description">{view.description}</span>
               </button>
             ))}
           </div>
@@ -591,12 +604,12 @@ const networkInsights = calculateNetworkInsights()
             </div>
           )}
 
-          {/* Network Integration Insight */}
+          {/* Network Integration Insight (includes Street Resilience) */}
           {insightView === 'integration' && networkInsights && (
             <div className="insight-panel integration-panel">
               <div className="insight-header">
-                <h4>Network Integration Index</h4>
-                <p className="insight-subtitle">Retail Opportunity Scoring (Beta-Weighted)</p>
+                <h4>Network Integration & Street Resilience</h4>
+                <p className="insight-subtitle">Retail Opportunity & Alternative Routes Analysis</p>
               </div>
               
               <div className="insight-cards">
@@ -614,36 +627,6 @@ const networkInsights = calculateNetworkInsights()
                     <div className="card-sublabel">Most central location</div>
                   </div>
                 </div>
-              </div>
-
-              <div className="insight-explanation">
-                <div className="explanation-text">
-                  <strong>Retail Strategy:</strong> Beta-weighted betweenness accounts for distance decay. 
-                  High-scoring streets (bright green) are optimal for retail - they balance flow volume with proximity.
-                </div>
-              </div>
-
-              <div className="metric-legend integration-legend">
-                <div className="legend-title">Integration Score</div>
-                <div className="gradient-bar-new integration-gradient"></div>
-                <div className="gradient-labels-new">
-                  <span>Peripheral</span>
-                  <span>Integrated</span>
-                  <span>Core</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Street Resilience Insight */}
-          {insightView === 'resilience' && networkInsights && (
-            <div className="insight-panel resilience-panel">
-              <div className="insight-header">
-                <h4>Street Network Resilience</h4>
-                <p className="insight-subtitle">Connectivity & Alternative Routes (Cycles)</p>
-              </div>
-              
-              <div className="insight-cards">
                 <div className="insight-card resilience-card">
                   <div className="card-content">
                     <div className="card-label">Avg Cycle Count</div>
@@ -662,22 +645,27 @@ const networkInsights = calculateNetworkInsights()
 
               <div className="insight-explanation">
                 <div className="explanation-text">
-                  <strong>Urban Porosity:</strong> High cycle counts (bright blue) indicate grid-like networks with 
-                  multiple routes between points. Low counts (red) show bottleneck zones where one closure paralyzes the area.
+                  <strong>Integration:</strong> Beta-weighted betweenness accounts for distance decay. 
+                  High-scoring streets (bright green) are optimal for retail - they balance flow volume with proximity.
+                  <br/><br/>
+                  <strong>Resilience:</strong> High cycle counts indicate grid-like networks with 
+                  multiple routes between points. Low counts show bottleneck zones where one closure paralyzes the area.
                 </div>
               </div>
 
-              <div className="metric-legend resilience-legend">
-                <div className="legend-title">Connectivity Rating</div>
-                <div className="gradient-bar-new resilience-gradient"></div>
+              <div className="metric-legend integration-legend">
+                <div className="legend-title">Integration Score</div>
+                <div className="gradient-bar-new integration-gradient"></div>
                 <div className="gradient-labels-new">
-                  <span>Tree-like</span>
-                  <span>Moderate</span>
-                  <span>Grid-like</span>
+                  <span>Peripheral</span>
+                  <span>Integrated</span>
+                  <span>Core</span>
                 </div>
               </div>
             </div>
           )}
+
+
 
           {/* Quick Stats Summary */}
           <div className="quick-stats-network">

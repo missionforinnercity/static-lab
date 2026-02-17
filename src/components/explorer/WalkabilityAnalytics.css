@@ -808,7 +808,7 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
-  min-height: 80px;
+  min-height: 110px;
 }
 
 .insight-view-btn::before {
@@ -854,6 +854,20 @@
 
 .insight-view-btn.active .view-label {
   color: #e8f5e9;
+}
+
+.view-description {
+  font-size: 0.7rem;
+  color: #66bb6a;
+  text-align: center;
+  line-height: 1.4;
+  opacity: 0.8;
+  max-width: 90%;
+}
+
+.insight-view-btn.active .view-description {
+  color: #c8e6c9;
+  opacity: 1;
 }
 
 /* Scale Toggle */

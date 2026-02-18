@@ -1,1 +1,2 @@
-street lights 
+street names fix
+make lighting more dramatic like top 20 percent bottom 20 percent

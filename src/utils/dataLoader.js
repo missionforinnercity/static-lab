@@ -12,16 +12,18 @@ export async function loadShadeData(season, timeOfDay) {
 }
 
 export async function loadLightingData() {
-  const [fixtures, projects, roadSegments] = await Promise.all([
+  const [fixtures, projects, roadSegments, streetLights] = await Promise.all([
     fetch('/data/processed/lighting/lighting.geojson').then(r => r.json()),
     fetch('/data/processed/lighting/streetLighting.json').then(r => r.json()),
-    fetch('/data/processed/lighting/road_segments_lighting_kpis.geojson').then(r => r.json())
+    fetch('/data/lighting/new_Lights/road_segments_lighting_kpis_all.geojson').then(r => r.json()),
+    fetch('/data/lighting/new_Lights/Street_lights.geojson').then(r => r.json())
   ])
   
   return { 
     fixtures,      // Individual streetlight fixtures (4387 points)
     projects,      // Lighting projects (5 multipoint features)
-    roadSegments   // Road segments with avg lumens - PRIMARY LAYER for lighting analysis
+    roadSegments,  // Road segments with avg lumens - PRIMARY LAYER for lighting analysis (with nearby_lights_count)
+    streetLights   // Individual street lights with operational status
   }
 }
 

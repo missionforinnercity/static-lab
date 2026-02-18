@@ -95,8 +95,9 @@ const LAYER_CATEGORIES = [
   { id: 'networkAnalysis', label: 'Network Analysis', dashboard: 'walkability', dataKey: 'network' },
   { id: 'transitAccessibility', label: 'Transit Accessibility', dashboard: 'walkability', dataKey: 'transitData' },
   // Lighting layers
-  { id: 'streetLighting', label: 'Street Lighting', dashboard: 'lighting', dataKey: 'lightingSegments' },
-  { id: 'lightingProjects', label: 'Municipal Street Lights', dashboard: 'lighting', dataKey: 'lightingProjects' },
+  { id: 'streetLighting', label: 'Street Lighting KPIs', dashboard: 'lighting', dataKey: 'lightingSegments' },
+  { id: 'municipalLights', label: 'Municipal Street Lights', dashboard: 'lighting', dataKey: 'streetLights' },
+  { id: 'missionInterventions', label: 'Mission Interventions', dashboard: 'lighting', dataKey: 'missionInterventions' },
   // Temperature layers
   { id: 'surfaceTemperature', label: 'Surface Temperature', dashboard: 'temperature', dataKey: 'temperatureSegments' },
   // Greenery layers
@@ -149,8 +150,10 @@ const UnifiedDataExplorer = () => {
   
   // Lighting dashboard state
   const [lightingSegments, setLightingSegments] = useState(null)
-  const [lightingProjects, setLightingProjects] = useState(null)
+  const [streetLights, setStreetLights] = useState(null)
+  const [missionInterventions, setMissionInterventions] = useState(null)
   const [lightIntensityRaster, setLightIntensityRaster] = useState(null)
+  const [lightingThresholds, setLightingThresholds] = useState(null)
   
   // Temperature dashboard state - using surfaceTemp dataset
   const [temperatureData, setTemperatureData] = useState(null)
@@ -178,8 +181,8 @@ const UnifiedDataExplorer = () => {
     cyclingActivity: false,
     // Lighting layers
     lightingSegments: false,
-    lightingProjects: false,
-    lightIntensity: false,
+    streetLights: false,
+    missionInterventions: false,
     // Temperature layers
     temperatureSegments: false,
     // Greenery layers
@@ -380,13 +383,40 @@ const UnifiedDataExplorer = () => {
   useEffect(() => {
     const loadLightingData = async () => {
       try {
-        const [segments, projects] = await Promise.all([
-          fetch('/data/lighting/road_segments_lighting_kpis.geojson').then(r => r.json()),
-          fetch('/data/lighting/lighting.geojson').then(r => r.json())
+        const [segments, projects, streetLights] = await Promise.all([
+          fetch('/data/lighting/new_Lights/road_segments_lighting_kpis_all.geojson').then(r => r.json()),
+          fetch('/data/lighting/streetLighting.json').then(r => r.json()),
+          fetch('/data/lighting/new_Lights/Street_lights.geojson').then(r => r.json())
         ])
         
+        // Calculate percentile thresholds for map styling
+        if (segments?.features) {
+          const validSegments = segments.features.filter(f => 
+            f.properties.mean_lux !== null && 
+            f.properties.mean_lux !== undefined &&
+            f.properties.mean_lux > 0
+          )
+          
+          if (validSegments.length > 0) {
+            const luxValues = validSegments.map(f => f.properties.mean_lux).sort((a, b) => a - b)
+            const percentile20Index = Math.floor(luxValues.length * 0.20)
+            const percentile80Index = Math.floor(luxValues.length * 0.80)
+            
+            setLightingThresholds({
+              bottom20: luxValues[percentile20Index],
+              top20: luxValues[percentile80Index]
+            })
+          }
+        }
+        
         setLightingSegments(segments)
-        setLightingProjects(projects)
+        setMissionInterventions(projects)
+        setStreetLights(streetLights)
+        console.log('Lighting data loaded:', {
+          segments: segments?.features?.length,
+          missionInterventions: projects?.features?.length,
+          streetLights: streetLights?.features?.length
+        })
         // Light intensity raster will be loaded separately in the map component
       } catch (error) {
         console.error('Error loading lighting data:', error)
@@ -394,7 +424,7 @@ const UnifiedDataExplorer = () => {
     }
     
     // Load lighting data when dashboard is lighting OR when any lighting layer is locked
-    const hasLockedLightingLayer = ['streetLighting', 'lightingProjects'].some(id => lockedLayers.has(id))
+    const hasLockedLightingLayer = ['streetLighting', 'municipalLights', 'missionInterventions'].some(id => lockedLayers.has(id))
     if (dashboardMode === 'lighting' || hasLockedLightingLayer) {
       loadLightingData()
     }
@@ -789,7 +819,9 @@ const UnifiedDataExplorer = () => {
           {dashboardMode === 'lighting' && (
             <LightingAnalytics
               segmentsData={lightingSegments}
-              projectsData={lightingProjects}
+              projectsData={missionInterventions}
+              streetLightsData={streetLights}
+              lightingThresholds={lightingThresholds}
               hideLayerControls={true}
             />
           )}
@@ -832,7 +864,9 @@ const UnifiedDataExplorer = () => {
             busStopsData={busStopsData}
             trainStationData={trainStationData}
             lightingSegments={lightingSegments}
-            lightingProjects={lightingProjects}
+            streetLights={streetLights}
+            missionInterventions={missionInterventions}
+            lightingThresholds={lightingThresholds}
             temperatureData={temperatureData}
             shadeData={shadeData}
             season={season}

@@ -27,7 +27,9 @@ const ExplorerMap = ({
   busStopsData,
   trainStationData,
   lightingSegments,
-  lightingProjects,
+  streetLights,
+  missionInterventions,
+  lightingThresholds,
   temperatureData,
   shadeData,
   season,
@@ -52,6 +54,18 @@ const ExplorerMap = ({
     // Check if this category is in the layer stack (either as active or locked)
     return layerStack.some(layer => layer.id === categoryId) || activeCategory === categoryId
   }
+  
+  // Debug logging for mission interventions
+  useEffect(() => {
+    if (missionInterventions) {
+      console.log('Mission interventions data available:', {
+        features: missionInterventions.features?.length,
+        shouldRender: shouldRenderCategory('missionInterventions'),
+        activeCategory,
+        layerStack
+      })
+    }
+  }, [missionInterventions, activeCategory, layerStack])
   
   // Helper function to get business name from displayName (which might be JSON string)
   const getBusinessName = (properties) => {
@@ -122,6 +136,7 @@ const ExplorerMap = ({
   // Handle map click
   const handleMapClick = (event) => {
     const feature = event.features?.[0]
+    console.log('Map clicked:', { feature, source: feature?.source, layerId: feature?.layer?.id })
     if (feature) {
       // For temperature dashboard, set selected segment for bottom panel
       if (dashboardMode === 'temperature' && feature.source === 'temperature-segments') {
@@ -141,6 +156,18 @@ const ExplorerMap = ({
       
       // For bus stops and train station, show a basic popup
       if (feature.source === 'bus-stops' || feature.source === 'train-station') {
+        setSelectedFeature(feature)
+        setPopupInfo({
+          longitude: event.lngLat.lng,
+          latitude: event.lngLat.lat,
+          feature: feature
+        })
+        return
+      }
+      
+      // For mission interventions and municipal lights, show appropriate popup
+      if (feature.source === 'mission-interventions' || feature.source === 'municipal-lights') {
+        console.log('Lighting feature clicked:', feature.source, feature.properties)
         setSelectedFeature(feature)
         setPopupInfo({
           longitude: event.lngLat.lng,
@@ -190,6 +217,8 @@ const ExplorerMap = ({
           'bus-stops-layer',
           'train-station-fill',
           'lighting-segments-layer',
+          'mission-interventions-layer',
+          'municipal-lights-layer',
           'temperature-segments-layer',
           'greenery-skyview-layer',
           'tree-canopy-layer',
@@ -944,18 +973,31 @@ const ExplorerMap = ({
                   id="lighting-segments-layer"
                   type="line"
                   paint={{
-                    'line-color': [
+                    'line-color': lightingThresholds ? [
                       'case',
                       ['==', ['get', 'mean_lux'], null],
                       '#4b5563',
                       [
                         'step',
                         ['get', 'mean_lux'],
-                        '#7f1d1d',  // Very Dark: 0-10 lux (deep red-brown)
-                        10, '#ff6b35',  // Low: 10-30 lux (warm orange - 2700K)
-                        30, '#ffa500',  // Moderate: 30-75 lux (amber - 3000K)
-                        75, '#ffd700',  // Well Lit: 75-120 lux (golden yellow - 4000K)
-                        120, '#f0f8ff'  // Excellent: 120+ lux (cool white - 5000K+)
+                        '#dc2626',  // Bottom 20% - Red
+                        lightingThresholds.bottom20,
+                        '#f59e0b',  // Middle 60% - Orange
+                        lightingThresholds.top20,
+                        '#10b981'   // Top 20% - Green
+                      ]
+                    ] : [
+                      'case',
+                      ['==', ['get', 'mean_lux'], null],
+                      '#4b5563',
+                      [
+                        'step',
+                        ['get', 'mean_lux'],
+                        '#dc2626',
+                        20,
+                        '#f59e0b',
+                        80,
+                        '#10b981'
                       ]
                     ],
                     'line-width': 5,
@@ -965,21 +1007,74 @@ const ExplorerMap = ({
               </Source>
             )}
             
-            {/* Lighting Projects Layer */}
-            {shouldRenderCategory('lightingProjects') && lightingProjects && (
+            {/* Mission Interventions Layer - Mission for Inner City Projects */}
+            {shouldRenderCategory('missionInterventions') && missionInterventions && (
               <Source
-                id="lighting-projects"
+                id="mission-interventions"
                 type="geojson"
-                data={lightingProjects}
+                data={missionInterventions}
+              >
+                {/* Outer glow layer */}
+                <Layer
+                  id="mission-interventions-outer-glow"
+                  type="line"
+                  paint={{
+                    'line-color': '#ffffff',
+                    'line-width': 16,
+                    'line-opacity': 0.2,
+                    'line-blur': 8
+                  }}
+                />
+                {/* Inner glow layer */}
+                <Layer
+                  id="mission-interventions-glow"
+                  type="line"
+                  paint={{
+                    'line-color': '#ffffff',
+                    'line-width': 10,
+                    'line-opacity': 0.5,
+                    'line-blur': 4
+                  }}
+                />
+                {/* Main line */}
+                <Layer
+                  id="mission-interventions-layer"
+                  type="line"
+                  paint={{
+                    'line-color': '#ffffff',
+                    'line-width': 3,
+                    'line-opacity': 1.0
+                  }}
+                />
+              </Source>
+            )}
+            
+            {/* Municipal Street Lights Layer */}
+            {shouldRenderCategory('municipalLights') && streetLights && (
+              <Source
+                id="municipal-lights"
+                type="geojson"
+                data={streetLights}
               >
                 <Layer
-                  id="lighting-projects-layer"
+                  id="municipal-lights-layer"
                   type="circle"
                   paint={{
-                    'circle-radius': 6,
-                    'circle-color': '#fbbf24',
+                    'circle-radius': [
+                      'interpolate',
+                      ['linear'],
+                      ['zoom'],
+                      12, 3,
+                      16, 6
+                    ],
+                    'circle-color': [
+                      'case',
+                      ['==', ['get', 'operational'], false],
+                      '#dc2626', // Red for broken lights
+                      '#10b981'  // Green for operational lights
+                    ],
                     'circle-opacity': 0.8,
-                    'circle-stroke-width': 2,
+                    'circle-stroke-width': 1,
                     'circle-stroke-color': '#ffffff'
                   }}
                 />
@@ -1335,12 +1430,100 @@ const ExplorerMap = ({
               
               {dashboardMode === 'lighting' && (
                 <>
-                  <h3>{popupInfo.feature.properties.name || 'Street Segment'}</h3>
-                  {popupInfo.feature.properties.mean_lux !== null && (
+                  {/* Mission Interventions */}
+                  {popupInfo.feature.source === 'mission-interventions' && (
                     <>
-                      <p><strong>Mean Lux:</strong> {popupInfo.feature.properties.mean_lux.toFixed(2)}</p>
-                      <p><strong>Min Lux:</strong> {popupInfo.feature.properties.min_lux?.toFixed(2)}</p>
-                      <p><strong>Max Lux:</strong> {popupInfo.feature.properties.max_lux?.toFixed(2)}</p>
+                      <h3>{popupInfo.feature.properties.title || 'Lighting Intervention'}</h3>
+                      {popupInfo.feature.properties.description && (
+                        <p style={{ fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                          {popupInfo.feature.properties.description}
+                        </p>
+                      )}
+                      {popupInfo.feature.properties.image && (
+                        <div style={{ marginTop: '0.75rem' }}>
+                          <img 
+                            src={popupInfo.feature.properties.image} 
+                            alt={popupInfo.feature.properties.title}
+                            style={{ 
+                              width: '200px',
+                              height: '140px',
+                              objectFit: 'cover',
+                              borderRadius: '4px',
+                              display: 'block'
+                            }}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              console.log('Image failed to load:', popupInfo.feature.properties.image);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Municipal Street Lights */}
+                  {popupInfo.feature.source === 'municipal-lights' && (
+                    <>
+                      <h3>Street Light</h3>
+                      {popupInfo.feature.properties.light_id && (
+                        <p><strong>Light ID:</strong> {popupInfo.feature.properties.light_id}</p>
+                      )}
+                      {popupInfo.feature.properties.pole_num && (
+                        <p><strong>Pole Number:</strong> {popupInfo.feature.properties.pole_num}</p>
+                      )}
+                      {popupInfo.feature.properties.wattage && (
+                        <p><strong>Wattage:</strong> {popupInfo.feature.properties.wattage}W</p>
+                      )}
+                      {popupInfo.feature.properties.lamptype && (
+                        <p><strong>Lamp Type:</strong> {popupInfo.feature.properties.lamptype}</p>
+                      )}
+                      {popupInfo.feature.properties.fixturesupport && (
+                        <p><strong>Support:</strong> {popupInfo.feature.properties.fixturesupport}</p>
+                      )}
+                      {popupInfo.feature.properties.lightcount && (
+                        <p><strong>Light Count:</strong> {popupInfo.feature.properties.lightcount}</p>
+                      )}
+                      <p style={{ 
+                        marginTop: '0.5rem',
+                        padding: '0.5rem',
+                        borderRadius: '4px',
+                        backgroundColor: popupInfo.feature.properties.operational ? '#d1fae5' : '#fee2e2',
+                        color: popupInfo.feature.properties.operational ? '#065f46' : '#991b1b',
+                        fontWeight: 'bold'
+                      }}>
+                        Status: {popupInfo.feature.properties.operational ? 'Operational' : 'Non-Operational'}
+                      </p>
+                      {!popupInfo.feature.properties.operational && popupInfo.feature.properties.Notes && (
+                        <div style={{ 
+                          marginTop: '0.5rem',
+                          padding: '0.5rem',
+                          backgroundColor: '#fef3c7',
+                          borderLeft: '3px solid #f59e0b',
+                          fontSize: '0.875rem'
+                        }}>
+                          <strong>Note:</strong> {popupInfo.feature.properties.Notes}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Road Segments (original lighting data) */}
+                  {popupInfo.feature.source === 'lighting-segments' && (
+                    <>
+                      <h3>{popupInfo.feature.properties.name || 'Street Segment'}</h3>
+                      {popupInfo.feature.properties.mean_lux !== null && (
+                        <>
+                          <p><strong>Mean Lux:</strong> {popupInfo.feature.properties.mean_lux.toFixed(2)}</p>
+                          <p><strong>Min Lux:</strong> {popupInfo.feature.properties.min_lux?.toFixed(2)}</p>
+                          <p><strong>Max Lux:</strong> {popupInfo.feature.properties.max_lux?.toFixed(2)}</p>
+                          {popupInfo.feature.properties.nearby_lights_count !== undefined && (
+                            <p><strong>Nearby Lights:</strong> {popupInfo.feature.properties.nearby_lights_count}</p>
+                          )}
+                          {popupInfo.feature.properties.pct_above_5lux !== undefined && (
+                            <p><strong>Coverage ≥5 Lux:</strong> {popupInfo.feature.properties.pct_above_5lux.toFixed(1)}%</p>
+                          )}
+                        </>
+                      )}
                     </>
                   )}
                 </>

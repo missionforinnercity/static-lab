@@ -1,0 +1,98 @@
+/* ─── StreetViewSnippet ───────────────────────────────────────────────────── */
+
+.sv-snippet {
+  background: transparent;
+  overflow: hidden;
+  width: 100%;
+}
+
+@keyframes sv-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sv-snippet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem 0.32rem;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.sv-snippet-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #dde0ea;
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 86%;
+}
+
+.sv-snippet-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+  transition: color 0.14s;
+}
+.sv-snippet-close:hover { color: rgba(255,255,255,0.85); }
+
+.sv-snippet-img {
+  width: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sv-snippet-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  width: 100%;
+  color: rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.02);
+}
+
+.sv-snippet-coords {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.02em;
+}
+
+.sv-snippet-hint {
+  font-size: 0.58rem;
+  color: rgba(255,255,255,0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sv-snippet-explore {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  width: 100%;
+  padding: 0.44rem 0.6rem;
+  background: rgba(66, 133, 244, 0.10);
+  border: none;
+  border-top: 1px solid rgba(66, 133, 244, 0.18);
+  color: #7eb8f8;
+  font-size: 0.69rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+  box-sizing: border-box;
+}
+.sv-snippet-explore:hover {
+  background: rgba(66, 133, 244, 0.20);
+  color: #aed4ff;
+}

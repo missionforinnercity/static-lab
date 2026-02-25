@@ -134,7 +134,53 @@
   gap: 1rem;
 }
 .sc-charts--two .sc-chart-col { flex: 1; }
-.sc-chart-col { display: flex; justify-content: center; }
+.sc-chart-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* ─── Street View toggle button ─────────────────────────────────────────── */
+.sc-sv-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 20px;
+  border: 1px solid rgba(66, 133, 244, 0.28);
+  background: rgba(66, 133, 244, 0.08);
+  color: rgba(126, 184, 248, 0.75);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.sc-sv-btn:hover {
+  background: rgba(66, 133, 244, 0.18);
+  color: #aed4ff;
+  border-color: rgba(66, 133, 244, 0.5);
+}
+.sc-sv-btn--active {
+  background: rgba(66, 133, 244, 0.20);
+  color: #aed4ff;
+  border-color: rgba(66, 133, 244, 0.55);
+}
+
+/* ─── Street View panel per column ─────────────────────────────────────── */
+.sc-sv-panel {
+  width: 100%;
+  border: 1px solid rgba(66, 133, 244, 0.25);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: sc-sv-in 0.18s ease;
+}
+
+@keyframes sc-sv-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 /* ─── SVG radar ──────────────────────────────────────────────────────────── */
 .sc-radar-wrap {

@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { RADAR_AXES } from '../utils/walkabilityEngine'
+import { StreetViewSnippet } from './StreetViewSnippet'
 import './StreetCompare.css'
 
 // ─── SVG Radar Chart ──────────────────────────────────────────────────────────
@@ -142,12 +143,16 @@ function CompareRow ({ label, a, b, format = v => v, invert = false }) {
 const COLORS = ['#e8a020', '#3d80c0']   // Segment A = amber, Segment B = steel blue
 
 const StreetCompare = ({ segments, onClose, onClear }) => {
+  const [svOpen, setSvOpen] = useState({})   // { 0: true, 1: true } — which columns have SV open
+
   if (!segments || segments.length === 0) return null
 
   const [a, b] = segments
   const aProps  = a?.properties || {}
   const bProps  = b?.properties || {}
   const hasTwo  = segments.length >= 2
+
+  const toggleSv = idx => setSvOpen(prev => ({ ...prev, [idx]: !prev[idx] }))
 
   const fmt1 = v => Math.round((v ?? 0) * 100)
   const fmtC = v => `${(v ?? 0).toFixed(1)}\u00b0C`
@@ -191,12 +196,47 @@ const StreetCompare = ({ segments, onClose, onClear }) => {
 
       {/* Charts */}
       <div className={`sc-charts ${hasTwo ? 'sc-charts--two' : ''}`}>
+        {/* Segment A */}
         <div className="sc-chart-col">
           <RadarChart segment={aProps} color={COLORS[0]} label="A" />
+          <button
+            className={`sc-sv-btn ${svOpen[0] ? 'sc-sv-btn--active' : ''}`}
+            onClick={() => toggleSv(0)}
+            title="Toggle Street View preview"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Street View
+          </button>
+          {svOpen[0] && (
+            <div className="sc-sv-panel">
+              <StreetViewSnippet feature={a} compact onClose={() => setSvOpen(prev => ({ ...prev, 0: false }))} />
+            </div>
+          )}
         </div>
+
+        {/* Segment B */}
         {hasTwo && (
           <div className="sc-chart-col">
             <RadarChart segment={bProps} color={COLORS[1]} label="B" />
+            <button
+              className={`sc-sv-btn ${svOpen[1] ? 'sc-sv-btn--active' : ''}`}
+              onClick={() => toggleSv(1)}
+              title="Toggle Street View preview"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              Street View
+            </button>
+            {svOpen[1] && (
+              <div className="sc-sv-panel">
+                <StreetViewSnippet feature={b} compact onClose={() => setSvOpen(prev => ({ ...prev, 1: false }))} />
+              </div>
+            )}
           </div>
         )}
       </div>

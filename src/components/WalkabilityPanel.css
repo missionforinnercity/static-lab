@@ -294,6 +294,11 @@
 .wlk-lb-row:hover { background: rgba(255,255,255,0.06); }
 .wlk-lb-row--top    { border-left: 2px solid rgba(58,158,112,0.4); }
 .wlk-lb-row--bottom { border-left: 2px solid rgba(184,64,64,0.4);  }
+.wlk-lb-row--active {
+  background: rgba(66, 133, 244, 0.10) !important;
+  border-left-color: rgba(66, 133, 244, 0.7) !important;
+}
+.wlk-lb-row--active .wlk-lb-name { color: #aed4ff; }
 
 .wlk-lb-rank {
   font-size: 0.72rem;
@@ -534,3 +539,27 @@
   font-size: 0.61rem;
   color: rgba(255,255,255,0.5);
 }
+
+/* ─── Street View Snippet ────────────────────────────────────────────────── */
+.wlk-sv-tab {
+  margin: 0.75rem 0.85rem 0.75rem;
+  border: 1px solid rgba(66, 133, 244, 0.25);
+  border-radius: 9px;
+  overflow: hidden;
+  animation: wlk-sv-in 0.2s ease;
+}
+
+.wlk-sv-tab-label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.65rem;
+  background: rgba(66, 133, 244, 0.10);
+  border-bottom: 1px solid rgba(66, 133, 244, 0.18);
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #7eb8f8;
+}
+/* Inner snippet styles are in StreetViewSnippet.css */

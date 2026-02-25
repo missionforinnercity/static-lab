@@ -14,9 +14,9 @@ export const STORY_TOURS = [
     tagline: 'Where is the city cooking its residents?',
     description:
       'High surface temps with no tree cover compound into a heat tax on every journey. ' +
-      'Segments with trees to walk under are intentionally excluded shade doesn\'t need ' +
-      'to cover the whole street to help. Streets shown here have neither canopy nor SVF relief. ' +
-      'They are a direct call to plant trees: the infrastructure gap is not terrain, it is amenity.',
+      'Segments with trees OR tall buildings providing urban enclosure are excluded — ' +
+      'architectural shade counts. Streets shown here have neither canopy nor building shade. ' +
+      'They are a direct call to plant trees or retrofit urban shade structures.',
     filterLabel: 'Hot + unshaded segments',
     // Only flag segments where shade is genuinely unavailable (shade score < 0.40).
     // A street with trees to walk under is not a heat-stress problem even if surface
@@ -208,12 +208,15 @@ export function segmentNarrative (feature, mode) {
   const p = feature.properties
   if (mode === 'day') {
     const parts = []
-    if (p.slope_penalty < 0.6)  parts.push('steep')
-    if (p.canopy_cover  < 0.2)  parts.push('no shade')
-    if (p.surface_temp  > 38)   parts.push(`${p.surface_temp}\u00b0C`)
-    if (p.canopy_cover  > 0.7)  parts.push('shaded')
+    if (p.slope_penalty < 0.6 && (p.retail_poi ?? 0) < 5) parts.push('steep')
+    if (p.slope_penalty < 0.6 && (p.retail_poi ?? 0) >= 5) parts.push('steep but retail-rich')
+    if ((p._s_shade ?? 0) < 0.3)  parts.push('no shade')
+    if ((p._s_shade ?? 0) >= 0.7) parts.push('well shaded')
+    if (p.surface_temp  > 38)   parts.push(`${p.surface_temp}°C`)
     if (p.slope_penalty > 0.9)  parts.push('flat')
     if (p.surface_temp  < 33)   parts.push('cooler')
+    if ((p.retail_poi ?? 0) >= 10) parts.push(`${p.retail_poi} retail`)
+    if (p.traffic_calm)         parts.push('traffic-calmed')
     return parts.length > 0 ? parts.join(' \xb7 ') : 'mixed'
   } else {
     const parts = []
@@ -225,11 +228,12 @@ export function segmentNarrative (feature, mode) {
   }
 }
 
-/** Axes for the radar / spider chart — 5 dimensions. */
+/** Axes for the radar / spider chart — 6 dimensions. */
 export const RADAR_AXES = [
-  { key: '_s_slope',  label: 'Slope',    description: 'Terrain penalty — Tobler from 5m DEM' },
-  { key: '_s_shade',  label: 'Shade',    description: 'Tree canopy + SVF blend, sqrt-normalised (20m buffer)' },
-  { key: '_s_temp',   label: 'Comfort',  description: 'Inverted surface temperature' },
-  { key: '_s_lux',    label: 'Lighting', description: 'Min-lux safety score' },
-  { key: '_s_night',  label: 'Activity', description: 'Night-time venue density' },
+  { key: '_s_slope',   label: 'Slope',     description: 'Terrain penalty — Tobler from 5m DEM, buffered by retail density' },
+  { key: '_s_shade',   label: 'Shade',     description: 'Max(canopy, urban enclosure) — trees OR tall buildings' },
+  { key: '_s_temp',    label: 'Comfort',   description: 'Inverted peak summer surface temperature' },
+  { key: '_s_retail',  label: 'Retail',    description: 'Curated retail density — restaurants, bakeries, galleries' },
+  { key: '_s_lux',     label: 'Lighting',  description: 'Min-lux safety score' },
+  { key: '_s_night',   label: 'Activity',  description: 'Night-time venue density' },
 ]

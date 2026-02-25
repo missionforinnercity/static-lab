@@ -6,7 +6,9 @@ import {
   getStats,
   quintileLabel,
 } from '../utils/walkabilityEngine'
+import { StreetViewSnippet } from './StreetViewSnippet'
 import './WalkabilityPanel.css'
+
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
@@ -20,21 +22,21 @@ function KpiBar ({ value, mode }) {
   )
 }
 
-function LeaderboardRow ({ feature, rank, mode, isBottom, stats, onSegmentClick }) {
+function LeaderboardRow ({ feature, rank, mode, isBottom, stats, onSegmentClick, isActive }) {
   const p    = feature.properties
   const kpi  = mode === 'day' ? p.kpi_day : p.kpi_night
   const band = stats ? quintileLabel(kpi, stats) : ''
 
   // sub-label: relevant raw values
   const sub = mode === 'day'
-    ? `${Math.round((p.canopy_cover ?? 0) * 100)}% canopy \u00b7 ${p.surface_temp}\u00b0C`
+    ? `${p.retail_poi ?? 0} retail \u00b7 ${Math.round((p._s_shade ?? 0) * 100)}% shade${p.traffic_calm ? ' \u00b7 \u26d4 calm' : ''}`
     : `${p.min_lux} lux \u00b7 ${p.night_poi} venues`
 
   return (
     <div
-      className={`wlk-lb-row wlk-lb-row--clickable ${isBottom ? 'wlk-lb-row--bottom' : 'wlk-lb-row--top'}`}
+      className={`wlk-lb-row wlk-lb-row--clickable ${isBottom ? 'wlk-lb-row--bottom' : 'wlk-lb-row--top'} ${isActive ? 'wlk-lb-row--active' : ''}`}
       onClick={() => onSegmentClick && onSegmentClick(feature)}
-      title="Click to highlight this segment on the map"
+      title="Click to open Street View for this segment"
     >
       <span className="wlk-lb-rank">{isBottom ? '\u2193' : rank}</span>
       <div className="wlk-lb-info">
@@ -56,18 +58,28 @@ function LeaderboardRow ({ feature, rank, mode, isBottom, stats, onSegmentClick 
 const METHODOLOGY = [
   {
     attr: 'Slope Penalty',
-    formula: 'Tobler hiking function',
-    detail: 'Elevation change extracted from a 5 m digital terrain model (EPSG:32734). Speed penalty applied per Tobler: v = 6·e^(−3.5·|tan(θ)+0.05|). Steeper segments score lower.'
+    formula: 'Tobler hiking function × retail buffer',
+    detail: 'Elevation change extracted from a 5 m digital terrain model (EPSG:32734). Speed penalty applied per Tobler: v = 6·e^(−3.5·|tan(θ)+0.05|). In retail-rich corridors (≥5 curated POIs within 150 m) the slope penalty is halved — people will walk uphill for a good destination.'
   },
   {
-    attr: 'Shade / Canopy',
-    formula: 'sqrt(0.70 × canopy + 0.30 × (1−SVF))',
-    detail: 'Each road segment is buffered 20 m (covering both footpaths). Intersection area with 1 873 tree-canopy polygons (CoCT Urban Forest dataset) is divided by the buffer area to give a 0–1 canopy fraction. This is blended with Sky View Factor (SVF) — a per-segment optical measurement of sky openness — at 70 % canopy / 30 % SVF shade (where SVF shade = 1 − SVF). A square-root transform is then applied so that partial coverage scores meaningfully higher: a pedestrian can walk under available shade even if it does not cover the whole street (e.g. 25 % blend → 0.50 score; 49 % blend → 0.70 score).'
+    attr: 'Shade: Urban Enclosure',
+    formula: 'sqrt(Max(canopy, 1−SVF))',
+    detail: 'Each road segment is buffered 20 m. Canopy fraction is computed against 1 873 CoCT tree polygons. Sky View Factor (SVF) captures how much sky is blocked by buildings. Using Max(canopy, 1−SVF) recognises that in a CBD, tall buildings provide \u201carchitectural shade\u201d just as effectively as trees (e.g. Bree Street\'s high-rise corridor). A sqrt transform ensures partial shade scores well — a pedestrian can walk on the shaded side even if coverage isn\'t total.'
   },
   {
     attr: 'Surface Temperature',
-    formula: 'Peak summer mean (°C)',
-    detail: 'Nearest surface-temperature segment matched by centroid distance (≤500 m). Peak value taken from the summer_temperatures timeseries array. Lower temperature → higher daytime score.'
+    formula: 'Peak summer mean (°C) — weight 15%',
+    detail: 'Nearest surface-temperature segment matched by centroid distance (≤500 m). Peak value from the summer_temperatures timeseries. Weight reduced from 30% to 15% because Cape Town pedestrians compensate by walking on the shady side of streets (captured by the shade score), not by staying indoors.'
+  },
+  {
+    attr: 'Retail Curation',
+    formula: 'sqrt(curated POI / max) — weight 25%',
+    detail: 'Counts quality retail/dining/culture destinations within 150 m: restaurants, bakeries, cafés, galleries, clothing, bookshops. Normalised 0–1 with sqrt so even a few good shops materially raise the score. Offices, banks, and doctors are excluded — they are not destinations that make a walk desirable.'
+  },
+  {
+    attr: 'Traffic Calm Multiplier',
+    formula: '1.3× on low-traffic segments',
+    detail: 'Segments matched to City of Cape Town traffic analysis data. Streets classified as \u201cLow\u201d congestion or unmatched (likely pedestrian malls / service alleys) receive a 1.3× multiplier on the daytime composite, capped at 1.0. A narrow street with no cars is more walkable than a wide street with heavy traffic.'
   },
   {
     attr: 'Min Lux',
@@ -81,13 +93,13 @@ const METHODOLOGY = [
   },
   {
     attr: 'KPI — Daytime (Wₐ)',
-    formula: '40% Slope · 30% Shade · 30% Temp⁻¹',
-    detail: 'Slope and temperature sub-scores are min-max normalised across all 1 057 segments. The shade sub-score uses the blended canopy + SVF value with a square-root transform before normalisation (see Shade / Canopy above). All three are then linearly combined with the weights above. Final score is 0–1; quintile bands applied city-wide.'
+    formula: '35% Slope · 25% Shade · 15% Temp⁻¹ · 25% Retail × calm',
+    detail: 'All sub-scores are min-max normalised 0–1 across 1 057 segments. Slope is Tobler-based with a retail buffer; shade uses Max(canopy, urban enclosure); temperature is inverted; retail curation measures destination quality. The product is then boosted 1.3× on traffic-calmed streets (capped at 1.0). Quintile bands applied city-wide.'
   },
   {
     attr: 'KPI — Nighttime (Wₙ)',
-    formula: '50% Min-Lux · 30% Night-Activity · 20% Slope',
-    detail: 'Same normalisation pipeline. Min-Lux is the dominant driver; nighttime activity rewards segments near active venues; slope remains a minor safety factor after dark.'
+    formula: '45% Min-Lux · 30% Night-Activity · 25% Slope',
+    detail: 'Min-Lux is the dominant driver. Nighttime activity rewards proximity to active venues. Slope is weighted higher than daytime because inclines are riskier after dark.'
   }
 ]
 
@@ -97,7 +109,8 @@ const DATA_SOURCES = [
   { layer: 'Tree Canopy',           explorer: 'Greenery › Tree Canopy',                          provider: 'City of Cape Town' },
   { layer: 'Sky View Factor (SVF)', explorer: 'Greenery › Greenery & Sky View',                  provider: 'City of Cape Town' },
   { layer: 'Digital Terrain Model', explorer: 'Slope — used in index only',                      provider: 'City of Cape Town' },
-  { layer: 'Points of Interest',    explorer: 'Business Analytics › Business Liveliness',        provider: 'City of Cape Town' },
+  { layer: 'Points of Interest',    explorer: 'Business Analytics › Business Liveliness',        provider: 'Google Places' },
+  { layer: 'Traffic Congestion',    explorer: 'Traffic › Traffic Analysis',                      provider: 'City of Cape Town' },
 ]
 
 function Accordion ({ title, badge, children }) {
@@ -115,10 +128,11 @@ function Accordion ({ title, badge, children }) {
 }
 
 const WalkabilityPanel = ({ onWalkabilityChange, compareCount, onSegmentClick }) => {
-  const [fc,          setFc]          = useState(null)
-  const [status,      setStatus]      = useState('loading')
-  const [mode,        setMode]        = useState('day')
-  const [activeTour,  setActiveTour]  = useState(null)
+  const [fc,              setFc]              = useState(null)
+  const [status,          setStatus]          = useState('loading')
+  const [mode,            setMode]            = useState('day')
+  const [activeTour,      setActiveTour]      = useState(null)
+  const [svSegment,       setSvSegment]       = useState(null)   // street-view preview
   const fcRef = useRef(null)
 
   useEffect(() => {
@@ -152,6 +166,11 @@ const WalkabilityPanel = ({ onWalkabilityChange, compareCount, onSegmentClick })
     setActiveTour(null)
   }, [])
 
+  const handleSegmentClick = useCallback(feature => {
+    onSegmentClick && onSegmentClick(feature)
+    setSvSegment(prev => prev?.properties === feature.properties ? null : feature)
+  }, [onSegmentClick])
+
   return (
     <div className="wlk-panel">
 
@@ -159,7 +178,7 @@ const WalkabilityPanel = ({ onWalkabilityChange, compareCount, onSegmentClick })
       <div className="wlk-header">
         <div>
           <h2 className="wlk-title">Walkability Index</h2>
-          <p className="wlk-subtitle">Dual-State &middot; Tobler &middot; 1 056 Segments</p>
+          <p className="wlk-subtitle">Dual-State &middot; Tobler &middot; Retail-Curated &middot; 1 056 Segments</p>
         </div>
         <span className="wlk-badge">KPI</span>
       </div>
@@ -268,14 +287,14 @@ const WalkabilityPanel = ({ onWalkabilityChange, compareCount, onSegmentClick })
           <div className="wlk-lb-group">
             <div className="wlk-lb-head wlk-lb-head--top">Most Walkable</div>
             {leaderboard.top.map((f, i) => (
-              <LeaderboardRow key={`t${i}`} feature={f} rank={i + 1} mode={effectiveMode} isBottom={false} stats={stats} onSegmentClick={onSegmentClick} />
+              <LeaderboardRow key={`t${i}`} feature={f} rank={i + 1} mode={effectiveMode} isBottom={false} stats={stats} onSegmentClick={handleSegmentClick} isActive={svSegment?.properties === f.properties} />
             ))}
           </div>
 
           <div className="wlk-lb-group" style={{ marginTop: '0.5rem' }}>
             <div className="wlk-lb-head wlk-lb-head--bottom">Least Walkable</div>
             {leaderboard.bottom.map((f, i) => (
-              <LeaderboardRow key={`b${i}`} feature={f} rank={leaderboard.bottom.length - i} mode={effectiveMode} isBottom stats={stats} onSegmentClick={onSegmentClick} />
+              <LeaderboardRow key={`b${i}`} feature={f} rank={leaderboard.bottom.length - i} mode={effectiveMode} isBottom stats={stats} onSegmentClick={handleSegmentClick} isActive={svSegment?.properties === f.properties} />
             ))}
           </div>
 
@@ -305,15 +324,29 @@ const WalkabilityPanel = ({ onWalkabilityChange, compareCount, onSegmentClick })
           {/* Formula */}
           <div className="wlk-formula">
             {effectiveMode === 'day'
-              ? 'W\u2090 = 40% Slope \xb7 30% Shade \xb7 30% Temp\u207b\xb9'
-              : 'W\u2099 = 50% Min-Lux \xb7 30% Night-Activity \xb7 20% Slope'}
+              ? 'W\u2090 = 35% Slope \xb7 25% Shade \xb7 15% Temp\u207b\xb9 \xb7 25% Retail \xd7 calm'
+              : 'W\u2099 = 45% Min-Lux \xb7 30% Night-Activity \xb7 25% Slope'}
           </div>
 
           {/* Click hint */}
           <div className="wlk-click-hint">
-            Click any street on the map to compare KPIs between two segments.
+            Click any leaderboard row to preview Street View &middot; click map segments to compare KPIs.
           </div>
         </>
+      )}
+
+      {/* ── Street View tab (bottom, persistent when a segment is selected) ── */}
+      {svSegment && (
+        <div className="wlk-sv-tab">
+          <div className="wlk-sv-tab-label-row">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            Street View Preview
+          </div>
+          <StreetViewSnippet feature={svSegment} onClose={() => setSvSegment(null)} />
+        </div>
       )}
 
       {/* ── Methodology ─────────────────────────────────────────────────── */}

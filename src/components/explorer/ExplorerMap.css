@@ -63,3 +63,89 @@
   background: rgba(255,255,255,0.08) !important;
   color: #ffffff;
 }
+
+/* ── Bbox draw overlay ──────────────────────────────────── */
+.bbox-draw-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  cursor: crosshair;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.bbox-draw-instructions {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: rgba(15, 22, 18, 0.92);
+  border: 1px solid rgba(0, 229, 160, 0.45);
+  border-radius: 8px;
+  color: #00e5a0;
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  animation: bbox-fade-in 0.25s ease-out;
+}
+
+@keyframes bbox-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.bbox-draw-rect {
+  position: absolute;
+  border: 2px solid #00e5a0;
+  background: rgba(0, 229, 160, 0.08);
+  box-shadow: 0 0 16px rgba(0, 229, 160, 0.2);
+  pointer-events: none;
+}
+
+.bbox-fixed-box {
+  pointer-events: auto;
+  border: 2.5px dashed #00e5a0;
+  border-radius: 4px;
+  background: rgba(0, 229, 160, 0.06);
+  box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.35), 0 0 24px rgba(0, 229, 160, 0.25);
+  transition: box-shadow 0.15s;
+}
+
+.bbox-fixed-box:hover {
+  box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.35), 0 0 32px rgba(0, 229, 160, 0.4);
+}
+
+.bbox-confirm-btn {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 28px;
+  background: rgba(0, 229, 160, 0.15);
+  border: 1.5px solid #00e5a0;
+  border-radius: 10px;
+  color: #00e5a0;
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 4px 24px rgba(0, 229, 160, 0.2);
+  z-index: 21;
+}
+
+.bbox-confirm-btn:hover {
+  background: rgba(0, 229, 160, 0.25);
+  box-shadow: 0 4px 32px rgba(0, 229, 160, 0.35);
+}

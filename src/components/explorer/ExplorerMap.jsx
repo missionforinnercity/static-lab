@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import Map, { Source, Layer, Popup } from 'react-map-gl'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import 'mapbox-gl/dist/mapbox-gl.css'
@@ -40,6 +40,8 @@ const ExplorerMap = ({
   layerStack = [],
   activeCategory,
   onMapLoad,
+  drawBboxMode,
+  onBboxDrawn,
   opinionSource,
   amenitiesFilters,
   categoriesFilters,
@@ -116,6 +118,56 @@ const ExplorerMap = ({
   
   const [selectedFeature, setSelectedFeature] = useState(null)
   const [popupInfo, setPopupInfo] = useState(null)
+
+  // ── Bbox drawing state ──────────────────────────────────────
+  const [boxPos, setBoxPos] = useState(null)    // { x, y } top-left of fixed box
+  const [isDragging, setIsDragging] = useState(false)
+  const dragOffset = useRef({ dx: 0, dy: 0 })
+  const BOX_W = 500, BOX_H = 400               // fixed box size in px
+
+  const handleDrawMouseDown = useCallback((e) => {
+    if (!drawBboxMode) return
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top
+    // Only place a new box if clicking outside an existing box (dragging is handled on the box element)
+    if (boxPos && mx >= boxPos.x && mx <= boxPos.x + BOX_W && my >= boxPos.y && my <= boxPos.y + BOX_H) return
+    // Place box centered on click
+    setBoxPos({ x: mx - BOX_W / 2, y: my - BOX_H / 2 })
+  }, [drawBboxMode, boxPos])
+
+  const handleDrawMouseMove = useCallback((e) => {
+    if (!isDragging || !boxPos) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top
+    setBoxPos({ x: mx - dragOffset.current.dx, y: my - dragOffset.current.dy })
+  }, [isDragging, boxPos])
+
+  const handleDrawMouseUp = useCallback(() => {
+    if (isDragging) {
+      setIsDragging(false)
+      return
+    }
+  }, [isDragging])
+
+  const handleConfirmBox = useCallback(() => {
+    if (!boxPos) return
+    const map = mapRef.current?.getMap?.()
+    if (!map) return
+    const sw = map.unproject([boxPos.x, boxPos.y + BOX_H])
+    const ne = map.unproject([boxPos.x + BOX_W, boxPos.y])
+    onBboxDrawn?.({ bbox: [sw.lng, sw.lat, ne.lng, ne.lat] })
+    setBoxPos(null)
+  }, [boxPos, onBboxDrawn])
+
+  // Reset draw state when mode is toggled off
+  useEffect(() => {
+    if (!drawBboxMode) {
+      setBoxPos(null)
+      setIsDragging(false)
+    }
+  }, [drawBboxMode])
 
   // Animated traffic flow dash offset
   const dashOffsetRef = useRef(0)
@@ -240,12 +292,60 @@ const ExplorerMap = ({
   
   return (
     <div className="explorer-map">
+      {/* Bbox drawing overlay */}
+      {drawBboxMode && (
+        <div
+          className="bbox-draw-overlay"
+          onMouseDown={handleDrawMouseDown}
+          onMouseMove={handleDrawMouseMove}
+          onMouseUp={handleDrawMouseUp}
+        >
+          <div className="bbox-draw-instructions">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor"><path d="M3 3h4V1H1v6h2V3zm14 0h-4V1h6v6h-2V3zM3 17h4v2H1v-6h2v4zm14 0h-4v2h6v-6h-2v4z"/></svg>
+            {boxPos ? 'Drag the box to reposition, then confirm' : 'Click on the map to place the analysis area'}
+          </div>
+          {boxPos && (
+            <>
+              <div
+                className="bbox-draw-rect bbox-fixed-box"
+                style={{
+                  left: boxPos.x,
+                  top: boxPos.y,
+                  width: BOX_W,
+                  height: BOX_H,
+                  cursor: isDragging ? 'grabbing' : 'grab',
+                }}
+                onMouseDown={(e) => {
+                  // Handle drag start directly on the box — never let it reach overlay
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDragging(true)
+                  const rect = e.currentTarget.parentElement.getBoundingClientRect()
+                  dragOffset.current = {
+                    dx: e.clientX - rect.left - boxPos.x,
+                    dy: e.clientY - rect.top  - boxPos.y
+                  }
+                }}
+              />
+              <button
+                className="bbox-confirm-btn"
+                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                onClick={handleConfirmBox}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                Generate Report
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <Map
         ref={mapRef}
         {...viewState}
         onMove={(evt) => setViewState(evt.viewState)}
         mapboxAccessToken={MAPBOX_TOKEN}
         mapStyle="mapbox://styles/mapbox/dark-v11"
+        preserveDrawingBuffer={true}
         interactiveLayerIds={[
           'businesses-points-layer',
           'businesses-ratings-layer',

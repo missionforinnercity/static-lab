@@ -805,3 +805,114 @@
   color: #ff7070;
   border-color: rgba(255, 80, 80, 0.40);
 }
+
+/* ── Light report toggle ─────────────────────────────── */
+.report-light-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  margin-right: 8px;
+  cursor: pointer;
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #94a3b8;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+  user-select: none;
+}
+.report-light-toggle input[type='checkbox'] {
+  accent-color: #00e5a0;
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.report-light-toggle:hover {
+  color: #cbd5e1;
+}
+
+/* ── Export Report Button ─────────────────────────────── */
+.export-report-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 0;
+  margin-right: 12px;
+  padding: 0 14px;
+  height: 30px;
+  background: rgba(0, 229, 160, 0.10);
+  border: 1px solid rgba(0, 229, 160, 0.30);
+  border-radius: 6px;
+  color: #00e5a0;
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.export-report-btn:hover:not(:disabled) {
+  background: rgba(0, 229, 160, 0.18);
+  border-color: rgba(0, 229, 160, 0.55);
+  box-shadow: 0 0 12px rgba(0, 229, 160, 0.15);
+}
+
+.export-report-btn:active:not(:disabled) {
+  background: rgba(0, 229, 160, 0.25);
+  transform: scale(0.97);
+}
+
+.export-report-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.export-report-btn.exporting {
+  color: rgba(0, 229, 160, 0.7);
+  border-color: rgba(0, 229, 160, 0.2);
+}
+
+.export-report-btn.draw-active {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+  animation: draw-pulse 1.5s ease-in-out infinite;
+}
+
+.export-report-btn.draw-active:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+@keyframes draw-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 229, 160, 0.3); }
+  50% { box-shadow: 0 0 12px 2px rgba(0, 229, 160, 0.25); }
+}
+
+.export-icon {
+  flex-shrink: 0;
+}
+
+.export-label {
+  line-height: 1;
+}
+
+.export-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(0, 229, 160, 0.2);
+  border-top-color: #00e5a0;
+  border-radius: 50%;
+  animation: export-spin 0.7s linear infinite;
+}
+
+@keyframes export-spin {
+  to { transform: rotate(360deg); }
+}

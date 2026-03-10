@@ -8,6 +8,7 @@ import LightingAnalytics from './LightingAnalytics'
 import TemperatureAnalytics from './TemperatureAnalytics'
 import GreeneryAnalytics from './GreeneryAnalytics'
 import TrafficAnalytics, { TRAFFIC_SCENARIOS } from './TrafficAnalytics'
+import { generateReport } from '../../utils/reportGenerator'
 import './UnifiedDataExplorer.css'
 
 // Define coordinate reference systems
@@ -188,6 +189,11 @@ const UnifiedDataExplorer = () => {
 
   // Rating filter — null = all, Set of floor values e.g. new Set([4,5])
   const [ratingFilter, setRatingFilter] = useState(null)
+
+  // Export report state
+  const [isExporting, setIsExporting] = useState(false)
+  const [reportLightMode, setReportLightMode] = useState(false)
+  const [drawBboxMode, setDrawBboxMode] = useState(false)
 
   // Layer visibility
   const [visibleLayers, setVisibleLayers] = useState({
@@ -893,6 +899,42 @@ const UnifiedDataExplorer = () => {
     }
   }
 
+  // Export: step 1 – toggle draw-bbox mode
+  const handleExportReport = useCallback(() => {
+    if (isExporting) return
+    setDrawBboxMode(prev => !prev)
+  }, [isExporting])
+
+  // Export: step 2 – user drew a bbox on the map
+  const handleBboxDrawn = useCallback(async ({ bbox }) => {
+    setDrawBboxMode(false)
+    setIsExporting(true)
+    try {
+      await generateReport(map, layerStack, {
+        businessesData,
+        streetStallsData,
+        propertiesData,
+        eventsData,
+        pedestrianData,
+        cyclingData,
+        networkData,
+        transitData,
+        lightingSegments,
+        streetLights,
+        missionInterventions,
+        temperatureData,
+        greeneryAndSkyview,
+        treeCanopyData,
+        parksData,
+        trafficData,
+      }, dashboardMode, bbox, { lightMode: reportLightMode })
+    } catch (err) {
+      console.error('Report generation failed:', err)
+    } finally {
+      setIsExporting(false)
+    }
+  }, [map, layerStack, businessesData, streetStallsData, propertiesData, eventsData, pedestrianData, cyclingData, networkData, transitData, lightingSegments, streetLights, missionInterventions, temperatureData, greeneryAndSkyview, treeCanopyData, parksData, trafficData, dashboardMode, reportLightMode])
+
   // Resize drag handlers
   const startSidebarDrag = useCallback((e) => {
     e.preventDefault()
@@ -927,6 +969,42 @@ const UnifiedDataExplorer = () => {
             </button>
           ))}
         </div>
+        <label className="report-light-toggle" title="Light mode uses a white background to save ink when printing">
+          <input
+            type="checkbox"
+            checked={reportLightMode}
+            onChange={e => setReportLightMode(e.target.checked)}
+            disabled={isExporting}
+          />
+          <span>Light report</span>
+        </label>
+        <button
+          className={`export-report-btn ${isExporting ? 'exporting' : ''} ${drawBboxMode ? 'draw-active' : ''}`}
+          onClick={handleExportReport}
+          disabled={isExporting}
+          title={drawBboxMode ? 'Click to cancel drawing' : 'Draw a bounding box to export a report'}
+        >
+          {isExporting ? (
+            <>
+              <span className="export-spinner" />
+              <span className="export-label">Generating…</span>
+            </>
+          ) : drawBboxMode ? (
+            <>
+              <svg className="export-icon" viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                <path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+              </svg>
+              <span className="export-label">Cancel Draw</span>
+            </>
+          ) : (
+            <>
+              <svg className="export-icon" viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                <path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"/>
+              </svg>
+              <span className="export-label">Export Report</span>
+            </>
+          )}
+        </button>
       </div>
       
       {/* Category sub-nav — horizontal pill bar below mode tabs */}
@@ -1205,6 +1283,8 @@ const UnifiedDataExplorer = () => {
             layerStack={layerStack}
             activeCategory={activeCategory}
             onMapLoad={setMap}
+            drawBboxMode={drawBboxMode}
+            onBboxDrawn={handleBboxDrawn}
             opinionSource={opinionSource}
             amenitiesFilters={amenitiesFilters}
             categoriesFilters={categoriesFilters}

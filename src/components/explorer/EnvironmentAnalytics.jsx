@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useCallback } from 'react'
+import React, { useMemo, useState } from 'react'
+import DateAvailabilityCalendar from './DateAvailabilityCalendar'
 import './EnvironmentAnalytics.css'
 
 // ─── Index definitions ────────────────────────────────────────────────────────
@@ -105,23 +106,10 @@ const EnvironmentAnalytics = ({ currentData, historyData, envIndex = 'uaqi', onE
     return days
   }, [historyData])
 
-  // Slider: 0..historyDates.length-1 = historical, historyDates.length = LIVE
-  const sliderMax = historyDates.length
-  const currentSliderVal = envDate ? historyDates.indexOf(envDate) : sliderMax
-
-  const handleSlider = useCallback((e) => {
-    const val = +e.target.value
-    onEnvDateChange?.(val >= sliderMax ? null : historyDates[val])
-  }, [sliderMax, historyDates, onEnvDateChange])
-
-  const stepDate = useCallback((delta) => {
-    const cur = envDate ? historyDates.indexOf(envDate) : sliderMax
-    const next = Math.max(0, Math.min(sliderMax, cur + delta))
-    onEnvDateChange?.(next >= sliderMax ? null : historyDates[next])
-  }, [envDate, historyDates, sliderMax, onEnvDateChange])
+  const activeDate = envDate || historyDates[historyDates.length - 1] || null
 
   const fmtSliderLabel = (dateStr) => {
-    if (!dateStr) return 'Live'
+    if (!dateStr) return '—'
     try {
       return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     } catch { return dateStr }
@@ -136,8 +124,8 @@ const EnvironmentAnalytics = ({ currentData, historyData, envIndex = 'uaqi', onE
     if (valid.length === 0) return null
 
     const avgUaqi = Math.round(valid.reduce((s, r) => s + r.uaqi, 0) / valid.length)
-    const maxUaqi = Math.max(...valid.map(r => r.uaqi))
-    const minUaqi = Math.min(...valid.map(r => r.uaqi))
+    const maxUaqi = Math.round(Math.max(...valid.map(r => r.uaqi)))
+    const minUaqi = Math.round(Math.min(...valid.map(r => r.uaqi)))
 
     // Dominant pollutant distribution
     const dominants = {}
@@ -156,7 +144,7 @@ const EnvironmentAnalytics = ({ currentData, historyData, envIndex = 'uaqi', onE
     })
 
     // Updated at
-    const updatedAt = valid[0]?.updated_at
+    const updatedAt = valid[0]?.updated_at || currentData?.fetchedAt
 
     return { avgUaqi, maxUaqi, minUaqi, topDominant, avgPoll, updatedAt, count: valid.length }
   }, [currentData])
@@ -224,36 +212,16 @@ const EnvironmentAnalytics = ({ currentData, historyData, envIndex = 'uaqi', onE
         <div className="env-date-scrubber">
           <div className="env-date-scrubber-header">
             <span className="env-date-scrubber-title">Time</span>
-            <span className={`env-date-badge ${!envDate ? 'live' : 'historic'}`}>
-              {envDate ? fmtSliderLabel(envDate) : 'Live'}
+            <span className="env-date-badge historic">
+              {fmtSliderLabel(activeDate)}
             </span>
           </div>
-          <div className="env-date-scrubber-controls">
-            <button className="env-date-step" onClick={() => stepDate(-1)} title="Previous day">‹</button>
-            <div className="env-date-track-wrap">
-              <input
-                type="range"
-                className="env-date-track"
-                min={0}
-                max={sliderMax}
-                step={1}
-                value={currentSliderVal < 0 ? sliderMax : currentSliderVal}
-                onChange={handleSlider}
-              />
-              <div className="env-date-tick-labels">
-                {historyDates.length > 0 && (
-                  <span>{fmtSliderLabel(historyDates[0])}</span>
-                )}
-                {historyDates.length > 3 && (
-                  <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
-                    {fmtSliderLabel(historyDates[Math.floor(historyDates.length / 2)])}
-                  </span>
-                )}
-                <span>Live</span>
-              </div>
-            </div>
-            <button className="env-date-step" onClick={() => stepDate(1)} title="Next day">›</button>
-          </div>
+          <DateAvailabilityCalendar
+            availableDates={historyDates}
+            selectedDate={envDate}
+            onChange={onEnvDateChange}
+            label="Map day"
+          />
         </div>
       )}
 
@@ -379,7 +347,7 @@ const EnvironmentAnalytics = ({ currentData, historyData, envIndex = 'uaqi', onE
                 <span className="env-loc-dot" style={{ background: b.color }} />
                 <span className="env-loc-name">{row.grid_id.replace(/_/g, ' ')}</span>
                 <span className="env-loc-type">500m cell</span>
-                <span className="env-loc-uaqi" style={{ color: b.color }}>{row.uaqi}</span>
+                <span className="env-loc-uaqi" style={{ color: b.color }}>{row.uaqi != null ? Math.round(row.uaqi) : '—'}</span>
               </button>
             )
           })}
@@ -396,7 +364,7 @@ const EnvironmentAnalytics = ({ currentData, historyData, envIndex = 'uaqi', onE
 
           <div className="env-detail-aqi">
             <span className="env-detail-aqi-val" style={{ color: aqiBand(selectedRow.uaqi).color }}>
-              {selectedRow.uaqi}
+              {selectedRow.uaqi != null ? Math.round(selectedRow.uaqi) : '—'}
             </span>
             <div className="env-detail-meta">
               <span style={{ color: aqiBand(selectedRow.uaqi).color }}>{selectedRow.uaqi_category}</span>
@@ -424,7 +392,7 @@ const EnvironmentAnalytics = ({ currentData, historyData, envIndex = 'uaqi', onE
                     <div className="env-detail-poll-track">
                       <div className="env-detail-poll-fill" style={{ width: `${pct}%`, background: safe ? meta.color : '#f44336' }} />
                     </div>
-                    <span className="env-detail-poll-val" style={{ color: safe ? meta.color : '#f44336' }}>{Math.round(val * 10) / 10}</span>
+                    <span className="env-detail-poll-val" style={{ color: safe ? meta.color : '#f44336' }}>{Math.round(val)}</span>
                   </div>
                   {hVals.length > 2 && (
                     <div className="env-detail-poll-sparkline">

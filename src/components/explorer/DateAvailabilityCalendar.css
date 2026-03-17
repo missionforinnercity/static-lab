@@ -1,0 +1,173 @@
+.availability-calendar {
+  position: relative;
+}
+
+.availability-calendar-trigger {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  background: rgba(15, 23, 42, 0.78);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.availability-calendar-trigger:hover:not(:disabled) {
+  border-color: rgba(34, 211, 238, 0.4);
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.availability-calendar-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.availability-calendar-trigger-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.availability-calendar-trigger-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.availability-calendar-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 220;
+  width: 280px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(2, 8, 23, 0.96);
+  box-shadow: 0 18px 50px rgba(2, 8, 23, 0.48);
+  backdrop-filter: blur(18px);
+}
+
+.availability-calendar-header {
+  display: grid;
+  grid-template-columns: 32px 1fr 32px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.availability-calendar-month {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  color: #e2e8f0;
+}
+
+.availability-calendar-nav {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.availability-calendar-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.availability-calendar-weekdays,
+.availability-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.availability-calendar-weekdays {
+  margin-bottom: 8px;
+}
+
+.availability-calendar-weekdays span {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.availability-calendar-empty,
+.availability-calendar-day {
+  aspect-ratio: 1;
+}
+
+.availability-calendar-day {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+}
+
+.availability-calendar-day.is-available {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.availability-calendar-day.is-available:hover {
+  border-color: rgba(34, 211, 238, 0.35);
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.availability-calendar-day.is-selected {
+  border-color: rgba(34, 211, 238, 0.5);
+  background: rgba(34, 211, 238, 0.18);
+  color: #67e8f9;
+}
+
+.availability-calendar-day.is-disabled {
+  color: rgba(148, 163, 184, 0.28);
+  background: rgba(255, 255, 255, 0.015);
+  cursor: not-allowed;
+}
+
+.availability-calendar-footer {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.availability-calendar-hint {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.availability-calendar-latest {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  background: rgba(34, 211, 238, 0.12);
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .availability-calendar-popover {
+    left: 0;
+    right: auto;
+    width: min(280px, calc(100vw - 64px));
+  }
+}

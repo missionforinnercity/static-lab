@@ -12,7 +12,7 @@ import './App.css'
 
 function App() {
   const [showLanding, setShowLanding] = useState(true)
-  const [mode, setMode] = useState('narrative') // 'narrative' or 'explorer'
+  const [mode, setMode] = useState('narrative') // 'narrative' | 'explorer'
   const [narrativeTab, setNarrativeTab] = useState('districts') // 'districts' | 'walkability'
   const [activeLayers, setActiveLayers] = useState({
     shade: false,

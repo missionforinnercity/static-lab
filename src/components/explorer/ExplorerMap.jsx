@@ -9,6 +9,228 @@ import { colorScales } from '../../utils/dataLoader'
 import './ExplorerMap.css'
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
+const ECOLOGY_HEAT_PEDESTAL_MIN_M = 0.8
+const ECOLOGY_HEAT_PEDESTAL_MAX_M = 1.9
+const ECOLOGY_BUILDING_LIFT_M = 2.2
+const ECOLOGY_SELECTION_LARGE_AREA_M2 = 6000
+const ECOLOGY_SELECTION_TARGET_AREA_M2 = 2500
+const ECOLOGY_SELECTION_MAX_SEGMENTS = 25
+
+const toEcologyFeatureKey = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  return String(value)
+}
+
+const parseEcologySelectionKey = (value) => {
+  const key = toEcologyFeatureKey(value)
+  if (!key) return null
+  const match = key.match(/^(.*)__seg_(\d+)_of_(\d+)$/)
+  if (!match) {
+    return {
+      selectionKey: key,
+      parentKey: key,
+      segmentIndex: null,
+      segmentCount: null
+    }
+  }
+  return {
+    selectionKey: key,
+    parentKey: match[1],
+    segmentIndex: Number(match[2]),
+    segmentCount: Number(match[3])
+  }
+}
+
+const getEcologySelectionGrid = (feature, explicitSegmentCount = null) => {
+  const areaM2 = Number(feature?.properties?.area_m2)
+  if (!Number.isFinite(areaM2) || areaM2 <= ECOLOGY_SELECTION_LARGE_AREA_M2) return null
+
+  const targetCount = explicitSegmentCount || Math.max(
+    2,
+    Math.min(
+      ECOLOGY_SELECTION_MAX_SEGMENTS,
+      Math.ceil(areaM2 / ECOLOGY_SELECTION_TARGET_AREA_M2)
+    )
+  )
+
+  const [minX, minY, maxX, maxY] = turf.bbox(feature)
+  const width = Math.max(maxX - minX, 1e-9)
+  const height = Math.max(maxY - minY, 1e-9)
+  const aspect = width / height
+  const cols = Math.max(1, Math.ceil(Math.sqrt(targetCount * aspect)))
+  const rows = Math.max(1, Math.ceil(targetCount / cols))
+
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    cols,
+    rows,
+    cellWidth: width / cols,
+    cellHeight: height / rows,
+    segmentCount: rows * cols
+  }
+}
+
+const buildEcologySelectionCell = (grid, row, col) => {
+  const x0 = grid.minX + col * grid.cellWidth
+  const x1 = col === grid.cols - 1 ? grid.maxX : x0 + grid.cellWidth
+  const y0 = grid.minY + row * grid.cellHeight
+  const y1 = row === grid.rows - 1 ? grid.maxY : y0 + grid.cellHeight
+
+  return turf.polygon([[
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+    [x0, y0]
+  ]])
+}
+
+const buildEcologySelectionKeyFromClick = (feature, lngLat) => {
+  const featureKey = toEcologyFeatureKey(feature?.properties?.feature_id_key || feature?.properties?.feature_id)
+  if (!featureKey) return null
+
+  const grid = getEcologySelectionGrid(feature)
+  if (!grid) return featureKey
+
+  const clickPoint = turf.point([lngLat.lng, lngLat.lat])
+  let bestMatch = null
+
+  for (let row = 0; row < grid.rows; row += 1) {
+    for (let col = 0; col < grid.cols; col += 1) {
+      const segmentIndex = (row * grid.cols) + col + 1
+      const cell = buildEcologySelectionCell(grid, row, col)
+
+      try {
+        const clipped = turf.intersect(feature, cell)
+        if (!clipped || turf.area(clipped) <= 1) continue
+
+        if (turf.booleanPointInPolygon(clickPoint, clipped)) {
+          return `${featureKey}__seg_${segmentIndex}_of_${grid.segmentCount}`
+        }
+
+        const centroid = turf.centroid(clipped)
+        const distance = turf.distance(clickPoint, centroid)
+        if (!bestMatch || distance < bestMatch.distance) {
+          bestMatch = { segmentIndex, distance }
+        }
+      } catch {
+        // Ignore failed segment intersections during click resolution.
+      }
+    }
+  }
+
+  return bestMatch
+    ? `${featureKey}__seg_${bestMatch.segmentIndex}_of_${grid.segmentCount}`
+    : featureKey
+}
+
+const buildEcologySelectionFeature = (feature, selectionKey) => {
+  const parsedSelection = parseEcologySelectionKey(selectionKey)
+  if (!feature || !parsedSelection?.segmentIndex || !parsedSelection?.segmentCount) return feature
+
+  const grid = getEcologySelectionGrid(feature, parsedSelection.segmentCount)
+  if (!grid) return feature
+
+  const zeroBasedIndex = parsedSelection.segmentIndex - 1
+  const row = Math.floor(zeroBasedIndex / grid.cols)
+  const col = zeroBasedIndex % grid.cols
+  const cell = buildEcologySelectionCell(grid, row, col)
+
+  try {
+    const clipped = turf.intersect(feature, cell)
+    if (clipped && turf.area(clipped) > 1) {
+      return {
+        ...clipped,
+        properties: { ...feature.properties }
+      }
+    }
+  } catch {
+    // Fall back to the full feature if clipping fails.
+  }
+
+  return feature
+}
+
+const ECOLOGY_METRIC_CONFIG = {
+  urban_heat_score: {
+    label: 'Urban Heat Score',
+    description: 'Heat priority',
+    property: 'urban_heat_score',
+    colorStops: [
+      [0, '#fff7ed'],
+      [20, '#fed7aa'],
+      [40, '#fdba74'],
+      [60, '#f97316'],
+      [80, '#dc2626'],
+      [100, '#7f1d1d']
+    ]
+  },
+  thermal_percentile: {
+    label: 'Thermal Percentile',
+    description: 'Relative heat rank',
+    property: 'thermal_percentile',
+    colorStops: [
+      [0, '#f8fafc'],
+      [25, '#fde68a'],
+      [50, '#fbbf24'],
+      [75, '#f97316'],
+      [100, '#991b1b']
+    ]
+  },
+  cool_island_score: {
+    label: 'Cool Island Score',
+    description: 'Cooling refuge',
+    property: 'cool_island_score',
+    colorStops: [
+      [0, '#fff7ed'],
+      [20, '#dbeafe'],
+      [40, '#7dd3fc'],
+      [60, '#22d3ee'],
+      [80, '#14b8a6'],
+      [100, '#0f766e']
+    ]
+  },
+  health_score: {
+    label: 'Health Score',
+    description: 'Vegetation condition',
+    property: 'health_score',
+    colorStops: [
+      [0, '#4a2c1c'],
+      [20, '#7c5a2a'],
+      [40, '#a3a334'],
+      [60, '#65a30d'],
+      [80, '#22c55e'],
+      [100, '#14532d']
+    ]
+  },
+  surface_air_delta_c: {
+    label: 'Surface-Air Delta',
+    description: 'Local heat-island effect',
+    property: 'surface_air_delta_c',
+    colorStops: [
+      [12, '#082f49'],
+      [14.5, '#0369a1'],
+      [16.5, '#38bdf8'],
+      [18.5, '#fde68a'],
+      [20.5, '#fb923c'],
+      [22.5, '#ef4444'],
+      [25.5, '#7f1d1d']
+    ]
+  }
+}
+
+const buildEcologyInterpolatedExpression = (property, stops) => {
+  const fallback = stops[0]?.[0] ?? 0
+  const expr = ['interpolate', ['linear'], ['coalesce', ['get', property], fallback]]
+  stops.forEach(([stop, value]) => {
+    expr.push(stop)
+    expr.push(value)
+  })
+  return expr
+}
 
 const ExplorerMap = ({
   dashboardMode,
@@ -38,10 +260,14 @@ const ExplorerMap = ({
   greeneryAndSkyview,
   treeCanopyData,
   parksData,
+  ecologyHeatData,
+  ecologyMetric = 'urban_heat_score',
+  selectedEcologyFeatureKeys = [],
   envCurrentData,
   envHistoryData,
   envIndex = 'uaqi',
   onEnvGridDetail,
+  onEcologyFeatureSelect,
   visibleLayers,
   layerStack = [],
   activeCategory,
@@ -142,6 +368,109 @@ const ExplorerMap = ({
     if (vals.length === 0) return null
     return { min: Math.min(...vals), max: Math.max(...vals), field: metric.field, label: metric.label, unit: metric.unit }
   }, [envIndex, envCurrentData])
+
+  const ecologyHeatPolygonData = useMemo(() => {
+    if (!ecologyHeatData?.features?.length) return null
+
+    return {
+      ...ecologyHeatData,
+      features: ecologyHeatData.features.map((feature) => {
+        const urbanHeatScore = Number(feature.properties?.urban_heat_score)
+        const thermalPercentile = Number(feature.properties?.thermal_percentile)
+        const coolIslandScore = Number(feature.properties?.cool_island_score)
+        const healthScore = Number(feature.properties?.health_score)
+        const surfaceAirDelta = Number(feature.properties?.surface_air_delta_c)
+        const featureKey = toEcologyFeatureKey(feature.properties?.feature_id)
+        const heatBalanceScore = (
+          (Number.isFinite(urbanHeatScore) ? urbanHeatScore : 0)
+          + (Number.isFinite(thermalPercentile) ? thermalPercentile * 0.35 : 0)
+          - (Number.isFinite(coolIslandScore) ? coolIslandScore * 0.68 : 0)
+        )
+        const enrichedFeature = {
+          ...feature,
+          properties: {
+            ...feature.properties,
+            feature_id_key: featureKey,
+            parent_feature_id_key: featureKey,
+            urban_heat_score: Number.isFinite(urbanHeatScore) ? urbanHeatScore : null,
+            thermal_percentile: Number.isFinite(thermalPercentile) ? thermalPercentile : null,
+            cool_island_score: Number.isFinite(coolIslandScore) ? coolIslandScore : null,
+            health_score: Number.isFinite(healthScore) ? healthScore : null,
+            mean_lst_c: Number.isFinite(Number(feature.properties?.mean_lst_c)) ? Number(feature.properties.mean_lst_c) : null,
+            surface_air_delta_c: Number.isFinite(surfaceAirDelta) ? surfaceAirDelta : null,
+            heat_balance_score: heatBalanceScore
+          }
+        }
+        return enrichedFeature
+      })
+    }
+  }, [ecologyHeatData])
+
+  const selectedEcologyPrimaryKey = selectedEcologyFeatureKeys[0] || null
+  const selectedEcologyCompareKey = selectedEcologyFeatureKeys[1] || null
+  const ecologyMetricConfig = ECOLOGY_METRIC_CONFIG[ecologyMetric] || ECOLOGY_METRIC_CONFIG.urban_heat_score
+  const ecologyMetricPaint = useMemo(() => {
+    return buildEcologyInterpolatedExpression(ecologyMetricConfig.property, ecologyMetricConfig.colorStops)
+  }, [ecologyMetricConfig])
+  const ecologyHeatVolumeHeight = useMemo(() => {
+    const heightStops = ecologyMetricConfig.colorStops.map(([stop], index, stops) => {
+      const progress = stops.length > 1 ? index / (stops.length - 1) : 1
+      const easedProgress = Math.pow(progress, 1.15)
+      const height = ECOLOGY_HEAT_PEDESTAL_MIN_M + (ECOLOGY_HEAT_PEDESTAL_MAX_M - ECOLOGY_HEAT_PEDESTAL_MIN_M) * easedProgress
+      return [stop, Number(height.toFixed(2))]
+    })
+    return buildEcologyInterpolatedExpression(ecologyMetricConfig.property, heightStops)
+  }, [ecologyMetricConfig])
+  const ecologySelectionGeometryData = useMemo(() => {
+    if (!ecologyHeatPolygonData?.features?.length) return null
+
+    const featureLookup = {}
+    ecologyHeatPolygonData.features.forEach((feature) => {
+      const featureKey = feature.properties?.feature_id_key
+      if (featureKey) featureLookup[featureKey] = feature
+    })
+
+    const selectedEntries = [
+      { selectionKey: selectedEcologyPrimaryKey, role: 'primary' },
+      { selectionKey: selectedEcologyCompareKey, role: 'compare' }
+    ].filter((entry) => entry.selectionKey)
+
+    if (!selectedEntries.length) return null
+
+    return {
+      type: 'FeatureCollection',
+      features: selectedEntries.map((entry) => {
+        const parsedSelection = parseEcologySelectionKey(entry.selectionKey)
+        const baseFeature = featureLookup[parsedSelection?.parentKey]
+        if (!baseFeature) return null
+        return {
+          ...buildEcologySelectionFeature(baseFeature, entry.selectionKey),
+          properties: {
+            ...baseFeature.properties,
+            selection_role: entry.role
+          }
+        }
+      }).filter(Boolean)
+    }
+  }, [ecologyHeatPolygonData, selectedEcologyCompareKey, selectedEcologyPrimaryKey])
+  const ecologySelectionMarkerData = useMemo(() => {
+    if (!ecologySelectionGeometryData?.features?.length) return null
+    return {
+      type: 'FeatureCollection',
+      features: ecologySelectionGeometryData.features.map((feature) => {
+        const isPrimary = feature.properties?.selection_role === 'primary'
+        const centroid = turf.centroid(feature)
+        return {
+          ...centroid,
+          properties: {
+            marker_label: isPrimary ? 'A' : 'B',
+            marker_color: isPrimary ? '#f97316' : '#67e8f9',
+            marker_title: `Section #${feature.properties?.feature_id}${feature.properties?.segment_label ? ` · ${feature.properties.segment_label}` : ''}`
+          }
+        }
+      })
+    }
+  }, [ecologySelectionGeometryData])
 
   // ─── Per-grid-cell historic averages (for "avg" mode) ────────────────────
   const histAvgByLocation = useMemo(() => {
@@ -247,22 +576,6 @@ const ExplorerMap = ({
     return turf.featureCollection(cells)
   }, [envCurrentData, histAvgByLocation])
 
-  // ─── History data grouped by grid cell (for popup charts) ──────────────────
-  const historyByLocation = useMemo(() => {
-    const rows = envHistoryData?.rows
-    if (!rows) return {}
-    const map = {}
-    rows.forEach(r => {
-      if (!map[r.grid_id]) map[r.grid_id] = []
-      map[r.grid_id].push(r)
-    })
-    Object.values(map).forEach(arr => arr.sort((a, b) => new Date(a.hour_utc) - new Date(b.hour_utc)))
-    return map
-  }, [envHistoryData])
-
-  // ─── Environment popup state ───────────────────────────────────────────────
-  const [envPopup, setEnvPopup] = useState(null) // { lng, lat, props }
-  
   // Debug logging for mission interventions
   useEffect(() => {
     if (missionInterventions) {
@@ -396,7 +709,14 @@ const ExplorerMap = ({
     const map = mapRef.current?.getMap?.()
     if (!map) return
     const applyFog = () => {
-      map.setFog({
+      const isThermalMode = activeCategory === 'urbanHeatConcrete'
+      map.setFog(isThermalMode ? {
+        color: 'rgba(22, 16, 14, 0.96)',
+        'high-color': 'rgba(64, 30, 20, 0.78)',
+        'horizon-blend': 0.08,
+        'space-color': 'rgba(5, 8, 15, 0.98)',
+        'star-intensity': 0.1
+      } : {
         color: 'rgb(10, 12, 18)',
         'high-color': 'rgb(18, 22, 36)',
         'horizon-blend': 0.04,
@@ -409,7 +729,7 @@ const ExplorerMap = ({
     } else {
       map.once('style.load', applyFog)
     }
-  }, [mapRef.current])
+  }, [activeCategory])
   
   // Debug logging
   useEffect(() => {
@@ -478,17 +798,17 @@ const ExplorerMap = ({
       
       // For environment Voronoi layers or station dots, show env popup
       if (feature.source === 'env-grid') {
-        // Toggle off if clicking the same grid cell
         const clickedId = feature.properties?.grid_id
-        if (envPopup && envPopup.props?.grid_id === clickedId) {
-          setEnvPopup(null)
-        } else {
-          setEnvPopup({
-            longitude: event.lngLat.lng,
-            latitude: event.lngLat.lat,
-            props: feature.properties
-          })
-        }
+        onEnvGridDetail?.(clickedId)
+        return
+      }
+
+      if (feature.source === 'ecology-heat') {
+        onEcologyFeatureSelect?.(
+          buildEcologySelectionKeyFromClick(feature, event.lngLat)
+          || feature.properties?.feature_id_key
+          || feature.properties?.feature_id
+        )
         return
       }
 
@@ -584,6 +904,10 @@ const ExplorerMap = ({
           'municipal-lights-layer',
           'temperature-segments-layer',
           'greenery-skyview-layer',
+          'ecology-heat-volume',
+          'ecology-heat-hit',
+          'ecology-heat-primary-outline',
+          'ecology-heat-compare-outline',
           'tree-canopy-layer',
           'parks-nearby-layer',
           'env-grid-fill',
@@ -1624,6 +1948,108 @@ const ExplorerMap = ({
                 />
               </Source>
             )}
+
+            {shouldRenderCategory('urbanHeatConcrete') && ecologyHeatPolygonData && (
+              <Source
+                id="ecology-heat"
+                type="geojson"
+                data={ecologyHeatPolygonData}
+                promoteId="feature_id_key"
+              >
+                <Layer
+                  id="ecology-heat-fill"
+                  type="fill"
+                  paint={{
+                    'fill-color': ecologyMetricPaint,
+                    'fill-opacity': 0.16
+                  }}
+                />
+                <Layer
+                  id="ecology-heat-volume"
+                  type="fill-extrusion"
+                  minzoom={13}
+                  paint={{
+                    'fill-extrusion-color': ecologyMetricPaint,
+                    'fill-extrusion-height': ecologyHeatVolumeHeight,
+                    'fill-extrusion-base': 0,
+                    'fill-extrusion-opacity': 1,
+                    'fill-extrusion-vertical-gradient': true
+                  }}
+                />
+                <Layer
+                  id="ecology-heat-hit"
+                  type="fill"
+                  paint={{
+                    'fill-color': '#ffffff',
+                    'fill-opacity': 0.01
+                  }}
+                />
+              </Source>
+            )}
+
+            {shouldRenderCategory('urbanHeatConcrete') && ecologySelectionGeometryData && (
+              <Source
+                id="ecology-heat-selection-geometry"
+                type="geojson"
+                data={ecologySelectionGeometryData}
+              >
+                <Layer
+                  id="ecology-heat-primary-outline"
+                  type="line"
+                  filter={['==', ['get', 'selection_role'], 'primary']}
+                  paint={{
+                    'line-color': '#f97316',
+                    'line-width': 3.2,
+                    'line-opacity': 0.95
+                  }}
+                />
+                <Layer
+                  id="ecology-heat-compare-outline"
+                  type="line"
+                  filter={['==', ['get', 'selection_role'], 'compare']}
+                  paint={{
+                    'line-color': '#67e8f9',
+                    'line-width': 3.2,
+                    'line-opacity': 0.95,
+                    'line-dasharray': [2, 1]
+                  }}
+                />
+              </Source>
+            )}
+
+            {shouldRenderCategory('urbanHeatConcrete') && ecologySelectionMarkerData && (
+              <Source
+                id="ecology-heat-selection-points"
+                type="geojson"
+                data={ecologySelectionMarkerData}
+              >
+                <Layer
+                  id="ecology-heat-selection-circles"
+                  type="circle"
+                  paint={{
+                    'circle-radius': 14,
+                    'circle-color': ['get', 'marker_color'],
+                    'circle-stroke-color': '#ffffff',
+                    'circle-stroke-width': 2,
+                    'circle-opacity': 0.95
+                  }}
+                />
+                <Layer
+                  id="ecology-heat-selection-labels"
+                  type="symbol"
+                  layout={{
+                    'text-field': ['get', 'marker_label'],
+                    'text-size': 12,
+                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                    'text-allow-overlap': true,
+                    'text-ignore-placement': true
+                  }}
+                  paint={{
+                    'text-color': '#ffffff'
+                  }}
+                />
+              </Source>
+            )}
             
             {/* Tree Canopy Layer */}
             {shouldRenderCategory('treeCanopy') && treeCanopyData && (
@@ -1852,8 +2278,35 @@ const ExplorerMap = ({
         
         {/* 3D Buildings — composite tileset from dark-v11 */}
         {(() => {
-          const spec = {
-            id: '3d-buildings',
+          const isEnvironmentView = dashboardMode === 'environment'
+          const isHeatView = activeCategory === 'urbanHeatConcrete'
+          const buildingBaseExpr = isHeatView
+            ? ['+', ['coalesce', ['get', 'min_height'], 0], ECOLOGY_BUILDING_LIFT_M]
+            : ['coalesce', ['get', 'min_height'], 0]
+          const buildingHeightExpr = isHeatView
+            ? ['+', ['max', 10, ['coalesce', ['get', 'height'], 6]], ECOLOGY_BUILDING_LIFT_M]
+            : ['coalesce', ['get', 'height'], 4]
+          const buildingMaskSpec = {
+            id: '3d-building-footprint-mask',
+            source: 'composite',
+            'source-layer': 'building',
+            type: 'fill',
+            minzoom: 14,
+            filter: ['==', ['get', 'extrude'], 'true'],
+            paint: {
+              'fill-color': '#120d0b',
+              'fill-opacity': isHeatView
+                ? [
+                    'interpolate', ['linear'], ['zoom'],
+                    14, 0.78,
+                    16, 0.84,
+                    18, 0.9
+                  ]
+                : 0
+            }
+          }
+          const buildingPedestalSpec = {
+            id: '3d-building-pedestal',
             source: 'composite',
             'source-layer': 'building',
             type: 'fill-extrusion',
@@ -1862,19 +2315,56 @@ const ExplorerMap = ({
             paint: {
               'fill-extrusion-color': [
                 'interpolate', ['linear'], ['coalesce', ['get', 'height'], 0],
-                0,   'rgba(28, 28, 30, 0.95)',
-                20,  'rgba(36, 36, 38, 0.92)',
-                60,  'rgba(48, 48, 50, 0.90)',
-                120, 'rgba(60, 60, 62, 0.88)',
-                200, 'rgba(72, 72, 74, 0.85)'
+                0, '#0f1218',
+                20, '#161c26',
+                60, '#20293a',
+                120, '#2d3950',
+                200, '#42536d'
               ],
-              'fill-extrusion-height': ['coalesce', ['get', 'height'], 4],
               'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-              'fill-extrusion-opacity': 0.72,
+              'fill-extrusion-height': ['+', ['coalesce', ['get', 'min_height'], 0], ECOLOGY_BUILDING_LIFT_M],
+              'fill-extrusion-opacity': isHeatView ? 1 : 0,
               'fill-extrusion-vertical-gradient': true
             }
           }
-          return <Layer {...spec} />
+          const spec = {
+            id: '3d-buildings',
+            source: 'composite',
+            'source-layer': 'building',
+            type: 'fill-extrusion',
+            minzoom: 14,
+            filter: ['==', ['get', 'extrude'], 'true'],
+            paint: {
+              'fill-extrusion-color': isHeatView
+                ? [
+                    'interpolate', ['linear'], ['coalesce', ['get', 'height'], 0],
+                    0, '#121418',
+                    20, '#1b222d',
+                    60, '#2b3444',
+                    120, '#425167',
+                    200, '#647a94'
+                  ]
+                : [
+                    'interpolate', ['linear'], ['coalesce', ['get', 'height'], 0],
+                    0, '#1c1c1e',
+                    20, '#242426',
+                    60, '#303032',
+                    120, '#3c3c3e',
+                    200, '#48484a'
+                  ],
+              'fill-extrusion-height': buildingHeightExpr,
+              'fill-extrusion-base': buildingBaseExpr,
+              'fill-extrusion-opacity': isHeatView ? 1 : (isEnvironmentView ? 1 : 0.72),
+              'fill-extrusion-vertical-gradient': true
+            }
+          }
+          return (
+            <>
+              <Layer {...buildingMaskSpec} />
+              <Layer {...buildingPedestalSpec} />
+              <Layer {...spec} />
+            </>
+          )
         })()}
 
         {/* Popup */}
@@ -2441,142 +2931,35 @@ const ExplorerMap = ({
           </Popup>
         )}
 
-        {/* ── Environment Grid Cell Popup (with historical charts) ───── */}
-        {envPopup && (() => {
-          const p = envPopup.props
-          const locHistory = historyByLocation[p.grid_id] || []
-          const uaqiBand = (() => {
-            const v = p.uaqi ?? 0
-            if (v <= 25) return { label: 'Excellent', color: '#22d3ee' }
-            if (v <= 50) return { label: 'Good', color: '#34d399' }
-            if (v <= 75) return { label: 'Moderate', color: '#facc15' }
-            if (v <= 100) return { label: 'Poor', color: '#f97316' }
-            return { label: 'Very Poor', color: '#ef4444' }
-          })()
-
-          const MiniAreaChart = ({ values, color, height = 40 }) => {
-            if (!values || values.length < 2) return null
-            const w = 220
-            const mn = Math.min(...values), mx = Math.max(...values), r = mx - mn || 1
-            const pts = values.map((v, i) => ({
-              x: (i / (values.length - 1)) * w,
-              y: height - 3 - ((v - mn) / r) * (height - 6)
-            }))
-            const lineD = pts.map((pt, i) => `${i ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join('')
-            const areaD = `${lineD}L${w},${height}L0,${height}Z`
-            const last = pts[pts.length - 1]
-            return (
-              <svg viewBox={`0 0 ${w} ${height}`} width="100%" height={height} style={{ display: 'block' }}>
-                <path d={areaD} fill={color} opacity="0.15" />
-                <path d={lineD} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-                <circle cx={last.x} cy={last.y} r="2.5" fill={color} />
-              </svg>
-            )
-          }
-
-          const uaqiHistory = locHistory.map(h => h.uaqi).filter(v => v != null)
-          const pollutants = [
-            { key: 'poll_o3_value', label: 'O₃', safe: 100, hKey: 'poll_o3', tip: 'Ground-level ozone — respiratory irritant' },
-            { key: 'poll_no2_value', label: 'NO₂', safe: 40, hKey: 'poll_no2', tip: 'Vehicle & industrial exhaust — lung inflammation' },
-            { key: 'poll_pm10_value', label: 'PM10', safe: 50, hKey: 'poll_pm10', tip: 'Coarse dust & construction particles' },
-            { key: 'poll_co_value', label: 'CO', safe: 500, hKey: 'poll_co', tip: 'Carbon monoxide — reduces blood oxygen' },
-            { key: 'poll_so2_value', label: 'SO₂', safe: 20, hKey: 'poll_so2', tip: 'Fossil fuel emissions — throat irritation' },
-          ]
-
-          return (
-            <Popup
-              longitude={envPopup.longitude}
-              latitude={envPopup.latitude}
-              onClose={() => setEnvPopup(null)}
-              closeButton={true}
-              anchor="bottom"
-              maxWidth="310px"
-              className="env-rich-popup"
-            >
-              <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: '#e2e8f0', padding: '2px 0' }}>
-                {/* Header */}
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>{(p.grid_id || '').replace(/_/g, ' ')}</div>
-                  <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>500m Grid Cell</div>
-                </div>
-
-                {/* UAQI hero */}
-                {p.uaqi != null && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, border: `1px solid ${uaqiBand.color}33` }}>
-                    <div style={{ fontSize: 34, fontWeight: 800, color: uaqiBand.color, lineHeight: 1, letterSpacing: -2 }}>{p.uaqi}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: uaqiBand.color }}>{uaqiBand.label}</div>
-                      {p.uaqi_dominant && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Dominant: <strong style={{ color: '#cbd5e1' }}>{p.uaqi_dominant.toUpperCase()}</strong></div>}
-                    </div>
-                  </div>
-                )}
-
-                {/* UAQI history chart */}
-                {uaqiHistory.length > 2 && (
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                      <span>UAQI History</span>
-                      <span style={{ color: '#94a3b8', textTransform: 'none', letterSpacing: 0 }}>
-                        {Math.min(...uaqiHistory)}–{Math.max(...uaqiHistory)}
-                      </span>
-                    </div>
-                    <MiniAreaChart values={uaqiHistory} color={uaqiBand.color} />
-                  </div>
-                )}
-
-                {/* Pollutant rows with inline sparklines */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {pollutants.map(({ key, label, safe, hKey, tip }) => {
-                    const val = parseFloat(p[key])
-                    if (isNaN(val)) return null
-                    const pct = Math.min((val / (safe * 2)) * 100, 100)
-                    const ok = val <= safe
-                    const barColor = ok ? '#34d399' : '#f87171'
-                    const hVals = locHistory.map(h => parseFloat(h[hKey])).filter(v => !isNaN(v))
-                    return (
-                      <div key={key}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 44px', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }} title={tip}>{label}</span>
-                          <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
-                            <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 3, transition: 'width 0.6s ease' }} />
-                            <div style={{ position: 'absolute', top: -1, left: '50%', width: 1, height: 7, background: 'rgba(255,255,255,0.2)' }} title={`Safe: ${safe}`} />
-                          </div>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: barColor, textAlign: 'right' }}>{val.toFixed(1)}</span>
-                        </div>
-                        <div style={{ fontSize: 9, color: '#64748b', marginLeft: 42, marginTop: 1, lineHeight: 1.3 }}>{tip}</div>
-                        {hVals.length > 2 && (
-                          <div style={{ marginLeft: 42, marginTop: 2 }}>
-                            <MiniAreaChart values={hVals} color={barColor} height={22} />
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {/* Health advice */}
-                {p.health_general && (
-                  <div style={{ fontSize: 10, color: '#facc15', padding: '6px 8px', background: 'rgba(250,204,21,0.06)', borderRadius: 6, border: '1px solid rgba(250,204,21,0.15)', lineHeight: 1.5, marginTop: 8 }}>
-                    ℹ {p.health_general}
-                  </div>
-                )}
-
-                {/* View detailed analysis button */}
-                {onEnvGridDetail && (
-                  <button
-                    onClick={() => { onEnvGridDetail(p.grid_id); setEnvPopup(null) }}
-                    style={{ width: '100%', marginTop: 8, padding: '7px 0', background: 'rgba(34,211,238,0.12)', border: '1px solid rgba(34,211,238,0.3)', borderRadius: 6, color: '#22d3ee', fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em', transition: 'background 0.2s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(34,211,238,0.22)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(34,211,238,0.12)'}
-                  >
-                    📊 View Detailed Analysis
-                  </button>
-                )}
-              </div>
-            </Popup>
-          )
-        })()}
       </Map>
+
+      {activeCategory === 'urbanHeatConcrete' && (
+        <div className="ecology-map-atmosphere">
+          <div className="ecology-map-kicker">{ecologyMetricConfig.label}</div>
+          <strong>
+            {selectedEcologyPrimaryKey
+              ? `Tracking #${selectedEcologyPrimaryKey}${selectedEcologyCompareKey ? ` vs #${selectedEcologyCompareKey}` : ''}`
+              : `${ecologyHeatPolygonData?.features?.length || 0} mapped sections`}
+          </strong>
+          <p>{ecologyMetricConfig.description}. Click once to inspect a section, then click another one to compare.</p>
+          {(selectedEcologyPrimaryKey || selectedEcologyCompareKey) && (
+            <div className="ecology-map-compare-key">
+              {selectedEcologyPrimaryKey && (
+                <div className="ecology-map-compare-item">
+                  <span className="ecology-map-compare-badge warm">A</span>
+                  <span>Primary segment</span>
+                </div>
+              )}
+              {selectedEcologyCompareKey && (
+                <div className="ecology-map-compare-item">
+                  <span className="ecology-map-compare-badge cool">B</span>
+                  <span>Compare segment</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

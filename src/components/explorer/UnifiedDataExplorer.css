@@ -253,7 +253,7 @@
 }
 
 .bottom-panel.env-bottom-panel {
-  height: 420px;
+  height: min(500px, 58vh);
   transition: height 0.25s ease;
 }
 
@@ -338,6 +338,269 @@
   flex: 1;
   padding: 1rem;
   overflow: auto;
+}
+
+.env-detail-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.env-detail-toolbar-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e2e8f0;
+}
+
+.env-detail-toolbar-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 3px;
+}
+
+.env-detail-toolbar .availability-calendar {
+  min-width: 220px;
+}
+
+.env-detail-summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.env-detail-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.env-detail-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.env-detail-stat strong {
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.ecology-detail-callout {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  color: #e2e8f0;
+  line-height: 1.5;
+}
+
+.ecology-detail-callout p {
+  margin: 0;
+}
+
+.ecology-driver-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ecology-driver-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ecology-driver-card span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.ecology-driver-card strong {
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.ecology-bottom-panel {
+  background:
+    radial-gradient(circle at top right, rgba(249, 115, 22, 0.12), transparent 32%),
+    radial-gradient(circle at bottom left, rgba(74, 216, 255, 0.1), transparent 36%),
+    rgba(11, 18, 30, 0.92);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.ecology-panel-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ecology-panel-headline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ecology-panel-score {
+  min-width: 74px;
+  height: 74px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(249, 115, 22, 0.22), rgba(127, 29, 29, 0.34));
+  border: 1px solid rgba(249, 115, 22, 0.22);
+  color: #fff7ed;
+  font-size: 1.7rem;
+  font-weight: 800;
+  box-shadow: 0 16px 32px rgba(120, 53, 15, 0.25);
+}
+
+.ecology-panel-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.ecology-charts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ecology-comparison-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ecology-comparison-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  font-size: 12px;
+}
+
+.ecology-role-badge {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.ecology-role-badge.warm {
+  background: #f97316;
+}
+
+.ecology-role-badge.cool {
+  background: #67e8f9;
+  color: #082f49;
+}
+
+.ecology-summary-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ecology-detail-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ecology-detail-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ecology-primary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ecology-chart-card,
+.ecology-compare-strip,
+.ecology-rank-card {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ecology-chart-head,
+.ecology-compare-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ecology-chart-head span,
+.ecology-compare-header span,
+.ecology-rank-card span,
+.ecology-compare-chip span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.ecology-chart-head strong,
+.ecology-compare-header strong,
+.ecology-rank-card strong,
+.ecology-compare-chip strong {
+  color: #f8fafc;
+}
+
+.ecology-compare-grid,
+.ecology-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ecology-compare-chip {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ecology-rank-card.cool {
+  box-shadow: inset 0 0 0 1px rgba(103, 232, 249, 0.16);
+}
+
+.ecology-rank-card p {
+  margin: 8px 0 0;
+  color: #cbd5e1;
+  line-height: 1.45;
 }
 
 #seasonal-charts-container {
@@ -515,6 +778,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: 0.01em;
+}
+
+@media (max-width: 900px) {
+  .env-detail-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .env-detail-toolbar .availability-calendar {
+    min-width: 0;
+  }
+
+  .env-detail-summary-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ecology-driver-grid,
+  .ecology-detail-layout,
+  .ecology-rank-grid,
+  .ecology-compare-grid,
+  .ecology-primary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Active Layers — sidebar-integrated ──────────────────────────────── */

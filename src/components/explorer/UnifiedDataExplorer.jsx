@@ -8,6 +8,9 @@ import LightingAnalytics from './LightingAnalytics'
 import TemperatureAnalytics from './TemperatureAnalytics'
 import GreeneryAnalytics from './GreeneryAnalytics'
 import EnvironmentAnalytics from './EnvironmentAnalytics'
+import EcologyHeatAnalytics from './EcologyHeatAnalytics'
+import EcologyHeatDetailPanel from './EcologyHeatDetailPanel'
+import DateAvailabilityCalendar from './DateAvailabilityCalendar'
 import TrafficAnalytics, { TRAFFIC_SCENARIOS } from './TrafficAnalytics'
 import { generateReport } from '../../utils/reportGenerator'
 import './UnifiedDataExplorer.css'
@@ -75,6 +78,31 @@ const transformGeoJSON = (geojson, sourceCRS, targetCRS) => {
   }
 }
 
+const toEcologyFeatureKey = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  return String(value)
+}
+
+const parseEcologySelectionKey = (value) => {
+  const key = toEcologyFeatureKey(value)
+  if (!key) return null
+  const match = key.match(/^(.*)__seg_(\d+)_of_(\d+)$/)
+  if (!match) {
+    return {
+      selectionKey: key,
+      parentKey: key,
+      segmentIndex: null,
+      segmentCount: null
+    }
+  }
+  return {
+    selectionKey: key,
+    parentKey: match[1],
+    segmentIndex: Number(match[2]),
+    segmentCount: Number(match[3])
+  }
+}
+
 const DASHBOARD_MODES = [
   { id: 'business', label: 'Business Analytics' },
   { id: 'walkability', label: 'Walkability & Cycling' },
@@ -107,6 +135,7 @@ const LAYER_CATEGORIES = [
   { id: 'surfaceTemperature', label: 'Surface Temperature', dashboard: 'temperature', dataKey: 'temperatureSegments' },
   // Environment layers (greenery + air quality)
   { id: 'airQuality',   label: 'Air Quality',  dashboard: 'environment', dataKey: 'airQualityVoronoi' },
+  { id: 'urbanHeatConcrete', label: 'Urban Heat & Concrete', dashboard: 'environment', dataKey: 'ecologyHeat' },
   { id: 'greeneryIndex', label: 'Greenery Index', dashboard: 'environment', dataKey: 'greenerySegments' },
   { id: 'treeCanopy', label: 'Tree Canopy', dashboard: 'environment', dataKey: 'treeCanopy' },
   { id: 'parksNearby', label: 'Parks Nearby', dashboard: 'environment', dataKey: 'parksNearby' },
@@ -114,8 +143,20 @@ const LAYER_CATEGORIES = [
   { id: 'trafficFlow', label: 'Traffic Flow', dashboard: 'traffic', dataKey: 'trafficSegments' }
 ]
 
+const getStoredExplorerState = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    const dashboardMode = window.localStorage.getItem('explorer:dashboardMode') || null
+    const activeCategory = window.localStorage.getItem('explorer:activeCategory') || null
+    return { dashboardMode, activeCategory }
+  } catch {
+    return {}
+  }
+}
+
 const UnifiedDataExplorer = () => {
-  const [dashboardMode, setDashboardMode] = useState('business')
+  const storedExplorerState = getStoredExplorerState()
+  const [dashboardMode, setDashboardMode] = useState(storedExplorerState.dashboardMode || 'business')
   const [map, setMap] = useState(null)
   
   // Business dashboard state
@@ -180,6 +221,12 @@ const UnifiedDataExplorer = () => {
   const [greeneryAndSkyview, setGreeneryAndSkyview] = useState(null)
   const [treeCanopyData, setTreeCanopyData] = useState(null)
   const [parksData, setParksData] = useState(null)
+  const [ecologyHeatByYear, setEcologyHeatByYear] = useState({})
+  const [ecologyYear, setEcologyYear] = useState(2026)
+  const [ecologyMetric, setEcologyMetric] = useState('urban_heat_score')
+  const [selectedEcologyFeatureKeys, setSelectedEcologyFeatureKeys] = useState([])
+  const [ecologyPanelMinimized, setEcologyPanelMinimized] = useState(false)
+  const ecologyDetailPanelRef = useRef(null)
 
   // Environment / air quality state (fetched from API)
   const [envCurrentData, setEnvCurrentData] = useState(null)
@@ -189,12 +236,20 @@ const UnifiedDataExplorer = () => {
   const envLastFetch = useRef(0)
   const [envDetailGrid, setEnvDetailGrid] = useState(null) // grid_id for bottom detail panel
   const [envPanelMinimized, setEnvPanelMinimized] = useState(false)
+  const envDetailPanelRef = useRef(null)
 
-  // Derive the rows shown on the map — either live current data or a historical day average
+  const envHistoryDates = useMemo(() => {
+    if (!envHistoryData?.rows) return []
+    return [...new Set(envHistoryData.rows.map(r => r.hour_utc?.slice(0, 10)).filter(Boolean))].sort()
+  }, [envHistoryData])
+
+  // Derive the rows shown on the map — always from history, defaulting to the latest date
   const envDisplayData = useMemo(() => {
-    if (!envDate || !envHistoryData?.rows) return envCurrentData
-    const dayRows = envHistoryData.rows.filter(r => r.hour_utc?.slice(0, 10) === envDate)
-    if (dayRows.length === 0) return envCurrentData
+    if (!envHistoryData?.rows) return null
+    const targetDate = envDate || envHistoryDates[envHistoryDates.length - 1]
+    if (!targetDate) return null
+    const dayRows = envHistoryData.rows.filter(r => r.hour_utc?.slice(0, 10) === targetDate)
+    if (dayRows.length === 0) return null
     // Average all hours of that day per grid cell
     const byGrid = {}
     dayRows.forEach(r => {
@@ -221,8 +276,124 @@ const UnifiedDataExplorer = () => {
       poll_pm10_value: avg(b.poll_pm10_value),
       poll_so2_value: avg(b.poll_so2_value),
     }))
-    return { rows, fetchedAt: envDate }
-  }, [envDate, envCurrentData, envHistoryData])
+    return { rows, fetchedAt: targetDate }
+  }, [envDate, envHistoryData, envHistoryDates])
+
+  const openEnvGridDetail = useCallback((gridId) => {
+    if (!gridId) return
+    setEnvDetailGrid(gridId)
+    setEnvPanelMinimized(false)
+  }, [])
+
+  useEffect(() => {
+    if (!envDetailGrid || envPanelMinimized) return
+    const timer = setTimeout(() => {
+      envDetailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }, 120)
+    return () => clearTimeout(timer)
+  }, [envDetailGrid, envPanelMinimized])
+
+  const ecologyCurrentData = useMemo(() => ecologyHeatByYear[ecologyYear] || null, [ecologyHeatByYear, ecologyYear])
+
+  const ecologyFeatureSeriesById = useMemo(() => {
+    const series = {}
+    Object.entries(ecologyHeatByYear).forEach(([yearKey, featureCollection]) => {
+      ;(featureCollection?.features || []).forEach((feature) => {
+        const featureKey = toEcologyFeatureKey(feature.properties?.feature_id)
+        if (!featureKey) return
+        if (!series[featureKey]) series[featureKey] = []
+        series[featureKey].push({
+          ...feature.properties,
+          feature_id_key: featureKey,
+          analysis_year: Number(yearKey),
+          feature_id: feature.properties?.feature_id
+        })
+      })
+    })
+    Object.values(series).forEach((entries) => entries.sort((a, b) => a.analysis_year - b.analysis_year))
+    return series
+  }, [ecologyHeatByYear])
+
+  const selectedEcologyFeatureSeries = useMemo(() => {
+    const primarySelection = parseEcologySelectionKey(selectedEcologyFeatureKeys[0])
+    if (!primarySelection?.parentKey) return []
+    return ecologyFeatureSeriesById[primarySelection.parentKey] || []
+  }, [ecologyFeatureSeriesById, selectedEcologyFeatureKeys])
+
+  const compareEcologyFeatureSeries = useMemo(() => {
+    const compareSelection = parseEcologySelectionKey(selectedEcologyFeatureKeys[1])
+    if (!compareSelection?.parentKey) return []
+    return ecologyFeatureSeriesById[compareSelection.parentKey] || []
+  }, [ecologyFeatureSeriesById, selectedEcologyFeatureKeys])
+
+  const ecologyCurrentFeatureLookup = useMemo(() => {
+    const lookup = {}
+    ;(ecologyCurrentData?.features || []).forEach((feature) => {
+      const featureKey = toEcologyFeatureKey(feature.properties?.feature_id)
+      if (!featureKey) return
+      lookup[featureKey] = {
+        ...feature.properties,
+        feature_id_key: featureKey
+      }
+    })
+    return lookup
+  }, [ecologyCurrentData])
+
+  const selectedEcologyFeature = useMemo(() => {
+    const primarySelection = parseEcologySelectionKey(selectedEcologyFeatureKeys[0])
+    if (!primarySelection?.parentKey) return null
+    const currentFeature = ecologyCurrentFeatureLookup[primarySelection.parentKey] || selectedEcologyFeatureSeries[selectedEcologyFeatureSeries.length - 1] || null
+    if (!currentFeature) return null
+    return {
+      ...currentFeature,
+      feature_id_key: primarySelection.selectionKey,
+      parent_feature_id_key: primarySelection.parentKey,
+      segment_index: primarySelection.segmentIndex,
+      segment_count: primarySelection.segmentCount,
+      segment_label: primarySelection.segmentIndex && primarySelection.segmentCount
+        ? `Segment ${primarySelection.segmentIndex} of ${primarySelection.segmentCount}`
+        : null
+    }
+  }, [ecologyCurrentFeatureLookup, selectedEcologyFeatureKeys, selectedEcologyFeatureSeries])
+
+  const compareEcologyFeature = useMemo(() => {
+    const compareSelection = parseEcologySelectionKey(selectedEcologyFeatureKeys[1])
+    if (!compareSelection?.parentKey) return null
+    const currentFeature = ecologyCurrentFeatureLookup[compareSelection.parentKey] || compareEcologyFeatureSeries[compareEcologyFeatureSeries.length - 1] || null
+    if (!currentFeature) return null
+    return {
+      ...currentFeature,
+      feature_id_key: compareSelection.selectionKey,
+      parent_feature_id_key: compareSelection.parentKey,
+      segment_index: compareSelection.segmentIndex,
+      segment_count: compareSelection.segmentCount,
+      segment_label: compareSelection.segmentIndex && compareSelection.segmentCount
+        ? `Segment ${compareSelection.segmentIndex} of ${compareSelection.segmentCount}`
+        : null
+    }
+  }, [compareEcologyFeatureSeries, ecologyCurrentFeatureLookup, selectedEcologyFeatureKeys])
+
+  const openEcologyFeatureDetail = useCallback((featureId) => {
+    const featureKey = toEcologyFeatureKey(featureId)
+    if (!featureKey) return
+    setSelectedEcologyFeatureKeys((current) => {
+      const [primaryKey, compareKey] = current
+      if (!primaryKey) return [featureKey]
+      if (featureKey === primaryKey) return compareKey ? [primaryKey] : [primaryKey]
+      if (featureKey === compareKey) return [primaryKey]
+      if (!compareKey) return [primaryKey, featureKey]
+      return [primaryKey, featureKey]
+    })
+    setEcologyPanelMinimized(false)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedEcologyFeatureKeys.length || ecologyPanelMinimized) return
+    const timer = setTimeout(() => {
+      ecologyDetailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }, 120)
+    return () => clearTimeout(timer)
+  }, [selectedEcologyFeatureKeys, ecologyPanelMinimized])
 
   // Traffic dashboard state
   const [trafficData, setTrafficData] = useState(null)
@@ -259,6 +430,7 @@ const UnifiedDataExplorer = () => {
     temperatureSegments: false,
     // Environment / greenery layers
     airQualityVoronoi: false,
+    ecologyHeat: false,
     greenerySegments: false,
     treeCanopy: false,
     parksNearby: false,
@@ -273,7 +445,26 @@ const UnifiedDataExplorer = () => {
   const [lockedLayers, setLockedLayers] = useState(new Set())
   
   // Currently selected category (for highlighting in sidebar)
-  const [activeCategory, setActiveCategory] = useState(null)
+  const [activeCategory, setActiveCategory] = useState(storedExplorerState.activeCategory || null)
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('explorer:dashboardMode', dashboardMode)
+      if (activeCategory) {
+        window.localStorage.setItem('explorer:activeCategory', activeCategory)
+      } else {
+        window.localStorage.removeItem('explorer:activeCategory')
+      }
+    } catch {
+      // Ignore storage issues and continue with in-memory state.
+    }
+  }, [dashboardMode, activeCategory])
+
+  useEffect(() => {
+    if (dashboardMode !== 'environment' || activeCategory === 'urbanHeatConcrete') return
+    setSelectedEcologyFeatureKeys([])
+    setEcologyPanelMinimized(false)
+  }, [dashboardMode, activeCategory])
   
   // Load business data
   useEffect(() => {
@@ -605,21 +796,38 @@ const UnifiedDataExplorer = () => {
     
     const loadGreeneryData = async () => {
       try {
-        const [greeneryResp, treeCanopyResp, parksResp] = await Promise.all([
+        const [greeneryResp, treeCanopyResp, parksResp, ...ecologyResponses] = await Promise.all([
           fetch('/data/greenery/greenryandSkyview.geojson'),
           fetch('/data/greenery/tree_canopy.geojson'),
-          fetch('/data/greenery/parks_nearby.geojson')
+          fetch('/data/greenery/parks_nearby.geojson'),
+          fetch('/data/greenery/ecology_analysis/cpt_cbd_ecology_2020.geojson'),
+          fetch('/data/greenery/ecology_analysis/cpt_cbd_ecology_2021.geojson'),
+          fetch('/data/greenery/ecology_analysis/cpt_cbd_ecology_2022.geojson'),
+          fetch('/data/greenery/ecology_analysis/cpt_cbd_ecology_2023.geojson'),
+          fetch('/data/greenery/ecology_analysis/cpt_cbd_ecology_2024.geojson'),
+          fetch('/data/greenery/ecology_analysis/cpt_cbd_ecology_2025.geojson'),
+          fetch('/data/greenery/ecology_analysis/cpt_cbd_ecology_2026.geojson')
         ])
-        const [greeneryData, treeCanopyData, parksData] = await Promise.all([
+        const [greeneryData, treeCanopyData, parksData, ...ecologyData] = await Promise.all([
           greeneryResp.json(),
           treeCanopyResp.json(),
-          parksResp.json()
+          parksResp.json(),
+          ...ecologyResponses.map(response => response.json())
         ])
         const transformedTreeCanopy = transformGeoJSON(treeCanopyData, 'EPSG:3857', 'EPSG:4326')
         setGreeneryAndSkyview(greeneryData)
         setTreeCanopyData(transformedTreeCanopy)
         setParksData(parksData)
-        console.log('Loaded greenery layers:', { greeneryData, treeCanopyData: transformedTreeCanopy, parksData })
+        setEcologyHeatByYear({
+          2020: ecologyData[0],
+          2021: ecologyData[1],
+          2022: ecologyData[2],
+          2023: ecologyData[3],
+          2024: ecologyData[4],
+          2025: ecologyData[5],
+          2026: ecologyData[6]
+        })
+        console.log('Loaded greenery layers:', { greeneryData, treeCanopyData: transformedTreeCanopy, parksData, ecologyYears: ecologyData.length })
       } catch (error) {
         console.error('Error loading greenery data:', error)
       }
@@ -649,7 +857,7 @@ const UnifiedDataExplorer = () => {
       }
     }
     
-    const hasLockedEnvLayer = ['greeneryIndex', 'treeCanopy', 'parksNearby', 'airQuality'].some(id => lockedLayers.has(id))
+    const hasLockedEnvLayer = ['greeneryIndex', 'treeCanopy', 'parksNearby', 'airQuality', 'urbanHeatConcrete'].some(id => lockedLayers.has(id))
     if (dashboardMode === 'environment' || hasLockedEnvLayer) {
       loadShadeData()
       loadGreeneryData()
@@ -1272,22 +1480,38 @@ const UnifiedDataExplorer = () => {
           
           {dashboardMode === 'environment' && (
             <>
-              <EnvironmentAnalytics
-                currentData={envCurrentData}
-                historyData={envHistoryData}
-                envIndex={envIndex}
-                onEnvIndexChange={setEnvIndex}
-                envDate={envDate}
-                onEnvDateChange={setEnvDate}
-              />
-              <GreeneryAnalytics
-                shadeData={shadeData}
-                greeneryAndSkyview={greeneryAndSkyview}
-                treeCanopyData={treeCanopyData}
-                parksData={parksData}
-                hideLayerControls={true}
-                allLayersActive={LAYER_CATEGORIES.filter(c => c.dashboard === 'environment').every(c => layerStack.some(l => l.id === c.id))}
-              />
+              {activeCategory === 'urbanHeatConcrete' ? (
+                <EcologyHeatAnalytics
+                  currentData={ecologyCurrentData}
+                  ecologyYear={ecologyYear}
+                  onEcologyYearChange={setEcologyYear}
+                  ecologyMetric={ecologyMetric}
+                  onEcologyMetricChange={setEcologyMetric}
+                  selectedFeature={selectedEcologyFeature}
+                  selectedSeries={selectedEcologyFeatureSeries}
+                  comparisonFeature={compareEcologyFeature}
+                  comparisonSeries={compareEcologyFeatureSeries}
+                />
+              ) : (
+                <>
+                  <EnvironmentAnalytics
+                    currentData={envDisplayData}
+                    historyData={envHistoryData}
+                    envIndex={envIndex}
+                    onEnvIndexChange={setEnvIndex}
+                    envDate={envDate}
+                    onEnvDateChange={setEnvDate}
+                  />
+                  <GreeneryAnalytics
+                    shadeData={shadeData}
+                    greeneryAndSkyview={greeneryAndSkyview}
+                    treeCanopyData={treeCanopyData}
+                    parksData={parksData}
+                    hideLayerControls={true}
+                    allLayersActive={LAYER_CATEGORIES.filter(c => c.dashboard === 'environment').every(c => layerStack.some(l => l.id === c.id))}
+                  />
+                </>
+              )}
             </>
           )}
 
@@ -1355,10 +1579,14 @@ const UnifiedDataExplorer = () => {
             greeneryAndSkyview={greeneryAndSkyview}
             treeCanopyData={treeCanopyData}
             parksData={parksData}
+            ecologyHeatData={ecologyCurrentData}
+            ecologyMetric={ecologyMetric}
+            selectedEcologyFeatureKeys={selectedEcologyFeatureKeys}
             envCurrentData={envDisplayData}
             envHistoryData={envHistoryData}
             envIndex={envIndex}
-            onEnvGridDetail={setEnvDetailGrid}
+            onEnvGridDetail={openEnvGridDetail}
+            onEcologyFeatureSelect={openEcologyFeatureDetail}
             visibleLayers={visibleLayers}
             layerStack={layerStack}
             activeCategory={activeCategory}
@@ -1488,7 +1716,8 @@ const UnifiedDataExplorer = () => {
 
           {/* ── Environment detail bottom panel ── */}
           {dashboardMode === 'environment' && envDetailGrid && (() => {
-            const gridRow = envCurrentData?.rows?.find(r => r.grid_id === envDetailGrid)
+            const gridRow = envDisplayData?.rows?.find(r => r.grid_id === envDetailGrid) || envCurrentData?.rows?.find(r => r.grid_id === envDetailGrid)
+            const currentGridRow = envCurrentData?.rows?.find(r => r.grid_id === envDetailGrid)
             const histRows = (envHistoryData?.rows || []).filter(r => r.grid_id === envDetailGrid)
             if (!gridRow || histRows.length === 0) return null
 
@@ -1500,9 +1729,40 @@ const UnifiedDataExplorer = () => {
               poll_so2: { label: 'SO\u2082 (Sulphur Dioxide)', desc: 'Released by burning fossil fuels containing sulphur. Causes throat and eye irritation and aggravates respiratory conditions.', safe: 20, color: '#fff176', unit: '\u00b5g/m\u00b3' },
             }
             const POLLUTANT_KEYS = Object.keys(POLL_DESC)
+            const numberOrNull = (value) => {
+              const parsed = parseFloat(value)
+              return Number.isFinite(parsed) ? parsed : null
+            }
+            const formatDayLabel = (day) => new Date(day + 'T12:00:00Z').toLocaleDateString('en-ZA', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric'
+            })
+            const formatLocalHour = (value) => new Date(value).toLocaleTimeString('en-ZA', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+              timeZone: 'Africa/Johannesburg'
+            })
 
             // Sort history by time
             const sorted = [...histRows].sort((a, b) => new Date(a.hour_utc) - new Date(b.hour_utc))
+            const availableDays = [...new Set(sorted.map(r => r.hour_utc?.slice(0, 10)).filter(Boolean))].sort()
+            const activeDay = (envDate && availableDays.includes(envDate))
+              ? envDate
+              : (availableDays[availableDays.length - 1] || null)
+            const selectedDayRows = activeDay
+              ? sorted.filter(r => r.hour_utc?.slice(0, 10) === activeDay)
+              : []
+            const hourlyData = selectedDayRows.map(r => ({
+              hour: formatLocalHour(r.hour_utc),
+              uaqi: numberOrNull(r.uaqi),
+              poll_o3: numberOrNull(r.poll_o3),
+              poll_no2: numberOrNull(r.poll_no2),
+              poll_pm10: numberOrNull(r.poll_pm10),
+              poll_co: numberOrNull(r.poll_co),
+              poll_so2: numberOrNull(r.poll_so2)
+            }))
 
             // Group by day for daily aggregation
             const byDay = {}
@@ -1519,7 +1779,7 @@ const UnifiedDataExplorer = () => {
                 const uaqiVals = rows.map(r => r.uaqi).filter(v => v != null)
                 const entry = {
                   day,
-                  displayDay: new Date(day + 'T12:00:00Z').toLocaleDateString('en-ZA', { weekday: 'short', month: 'short', day: 'numeric' }),
+                  displayDay: formatDayLabel(day),
                   uaqi_avg: avg(uaqiVals),
                   uaqi_max: max(uaqiVals),
                   hours: rows.length,
@@ -1540,16 +1800,30 @@ const UnifiedDataExplorer = () => {
               if (v <= 100) return { label: 'Poor', color: '#f97316' }
               return { label: 'Very Poor', color: '#ef4444' }
             }
-            const band = uaqiBand(gridRow.uaqi ?? 0)
+            const band = uaqiBand(gridRow.uaqi ?? currentGridRow?.uaqi ?? 0)
 
             // Peak day
             const peakDay = dailyData.reduce((best, d) => (!best || (d.uaqi_max || 0) > (best.uaqi_max || 0)) ? d : best, null)
+            const worstHour = hourlyData.reduce((best, point) => {
+              if (point.uaqi == null) return best
+              if (!best || point.uaqi > best.uaqi) return point
+              return best
+            }, null)
+            const bestHour = hourlyData.reduce((best, point) => {
+              if (point.uaqi == null) return best
+              if (!best || point.uaqi < best.uaqi) return point
+              return best
+            }, null)
 
             return (
-              <div className={`bottom-panel env-bottom-panel ${envPanelMinimized ? 'env-minimized' : ''}`} style={{ marginRight: sidebarWidth + 32 }}>
+              <div
+                ref={envDetailPanelRef}
+                className={`bottom-panel env-bottom-panel ${envPanelMinimized ? 'env-minimized' : ''}`}
+                style={{ marginRight: sidebarWidth + 32 }}
+              >
                 <div className="panel-header">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 28, fontWeight: 800, color: band.color }}>{gridRow.uaqi}</span>
+                    <span style={{ fontSize: 28, fontWeight: 800, color: band.color }}>{Math.round(gridRow.uaqi ?? currentGridRow?.uaqi ?? 0)}</span>
                     <div>
                       <h3 style={{ margin: 0 }}>{(gridRow.grid_id || '').replace(/_/g, ' ')} — Air Quality Detail</h3>
                       <span style={{ fontSize: 11, color: '#94a3b8' }}>{band.label} · {sorted.length} hourly readings · {dailyData.length} days</span>
@@ -1566,8 +1840,40 @@ const UnifiedDataExplorer = () => {
                 </div>
 
                 {!envPanelMinimized && <div className="charts-container" style={{ display: 'flex', gap: 16, padding: '12px 16px', overflow: 'auto' }}>
-                  {/* Left: Daily UAQI chart */}
-                  <div style={{ flex: '1 1 340px', minWidth: 280 }}>
+                  {/* Left: Daily + hourly UAQI charts */}
+                  <div style={{ flex: '1 1 420px', minWidth: 320, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div className="env-detail-toolbar">
+                      <div>
+                        <div className="env-detail-toolbar-label">Time Lens</div>
+                        <div className="env-detail-toolbar-subtitle">Hourly chart follows the selected map day</div>
+                      </div>
+                      <DateAvailabilityCalendar
+                        availableDates={availableDays}
+                        selectedDate={envDate}
+                        onChange={setEnvDate}
+                        label="Detail day"
+                      />
+                    </div>
+
+                    <div className="env-detail-summary-row">
+                      <div className="env-detail-stat">
+                        <span className="env-detail-stat-label">Selected Day</span>
+                        <strong>{activeDay ? formatDayLabel(activeDay) : '—'}</strong>
+                      </div>
+                      <div className="env-detail-stat">
+                        <span className="env-detail-stat-label">Best Hour</span>
+                        <strong>{bestHour ? `${bestHour.hour} · ${Math.round(bestHour.uaqi)}` : '—'}</strong>
+                      </div>
+                      <div className="env-detail-stat">
+                        <span className="env-detail-stat-label">Worst Hour</span>
+                        <strong>{worstHour ? `${worstHour.hour} · ${Math.round(worstHour.uaqi)}` : '—'}</strong>
+                      </div>
+                      <div className="env-detail-stat">
+                        <span className="env-detail-stat-label">Samples</span>
+                        <strong>{hourlyData.length} hourly points</strong>
+                      </div>
+                    </div>
+
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Daily UAQI (Avg & Peak)</span>
                       {peakDay && (
@@ -1593,6 +1899,28 @@ const UnifiedDataExplorer = () => {
                         />
                       </LineChart>
                     </ResponsiveContainer>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Time of Day vs Air Quality
+                      </span>
+                      <span style={{ fontSize: 10, color: '#94a3b8' }}>
+                        Cape Town local time
+                      </span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={hourlyData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                        <XAxis dataKey="hour" stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <YAxis stroke="#64748b" tick={{ fontSize: 10 }} domain={['dataMin - 2', 'dataMax + 5']} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: 6, fontSize: 11, color: '#e2e8f0' }}
+                          formatter={(value) => [value != null ? Math.round(value) : '—', 'UAQI']}
+                          labelFormatter={(value) => `${value} on ${activeDay ? formatDayLabel(activeDay) : 'selected day'}`}
+                        />
+                        <Line type="monotone" dataKey="uaqi" stroke={band.color} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
 
                   {/* Right: Pollutant cards with descriptions + daily bars */}
@@ -1600,7 +1928,7 @@ const UnifiedDataExplorer = () => {
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>Pollutant Breakdown</span>
                     {POLLUTANT_KEYS.map(pk => {
                       const meta = POLL_DESC[pk]
-                      const currentVal = parseFloat(gridRow[pk + '_value'])
+                      const currentVal = parseFloat(gridRow[pk + '_value'] ?? currentGridRow?.[pk + '_value'])
                       const safe = !isNaN(currentVal) && currentVal <= meta.safe
                       return (
                         <div key={pk} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 10px', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1636,6 +1964,22 @@ const UnifiedDataExplorer = () => {
               </div>
             )
           })()}
+
+          {dashboardMode === 'environment' && activeCategory === 'urbanHeatConcrete' && selectedEcologyFeature && (
+            <EcologyHeatDetailPanel
+              featureSeries={selectedEcologyFeatureSeries}
+              currentFeature={selectedEcologyFeature}
+              compareFeature={compareEcologyFeature}
+              compareSeries={compareEcologyFeatureSeries}
+              currentYearData={ecologyCurrentData}
+              selectedYear={ecologyYear}
+              sidebarWidth={sidebarWidth}
+              panelRef={ecologyDetailPanelRef}
+              minimized={ecologyPanelMinimized}
+              onToggleMinimized={() => setEcologyPanelMinimized(current => !current)}
+              onClose={() => { setSelectedEcologyFeatureKeys([]); setEcologyPanelMinimized(false) }}
+            />
+          )}
         </main>
 
         {/* Business bottom panel */}

@@ -1,11 +1,14 @@
-import React from 'react'
-import UnifiedDataExplorer from './explorer/UnifiedDataExplorer'
+import React, { lazy, Suspense } from 'react'
 import './DataExplorer.css'
+
+const UnifiedDataExplorer = lazy(() => import('./explorer/UnifiedDataExplorer'))
 
 const DataExplorer = ({ filters, onFiltersChange, activeLayers, onLayersChange }) => {
   return (
     <div className="data-explorer">
-      <UnifiedDataExplorer />
+      <Suspense fallback={<div className="app-loading-screen">Loading explorer analytics...</div>}>
+        <UnifiedDataExplorer />
+      </Suspense>
     </div>
   )
 }

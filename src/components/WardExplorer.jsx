@@ -1,635 +1,1726 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import mapboxgl from 'mapbox-gl'
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend
+} from 'recharts'
+import { MAPBOX_TOKEN } from '../utils/mapboxToken'
 import './WardExplorer.css'
 
-mapboxgl.accessToken = 'pk.eyJ1IjoiYW5lZXNvbWFyIiwiYSI6ImNtN3lnYXhveTA5NmsyanM2Z2NmaHhrcncifQ.xIzrc87ZIEJZE1vpB2gFfw'
+mapboxgl.accessToken = MAPBOX_TOKEN
 
-// ─── Tab / Metric Configuration ──────────────────────────────────────────────
-// pct: [lo, hi] clips the colour range to those percentiles (0–100)
-// omit pct to use full min–max
-const TABS = [
-  {
-    id: 'greenblue',
-    label: 'Nature Access',
-    description: 'Green spaces, parks and blue water features scored per neighbourhood.',
-    metrics: [
-      { key: 'GreenBlue_Score', label: 'Combined Score', low: [10, 26, 20],  high: [0, 230, 118] },
-      { key: 'Green_Score',     label: 'Green Score',    low: [10, 30, 15],  high: [105, 240, 174] },
-      { key: 'Blue_Score',      label: 'Blue Score',     low: [10, 20, 40],  high: [64, 196, 255] },
-    ],
-    statFields: [
-      { key: 'GreenBlue_Score', label: 'Green-Blue Score', fmt: v => v.toFixed(3) },
-      { key: 'Green_Score',     label: 'Green Score',      fmt: v => v.toFixed(3) },
-      { key: 'Blue_Score',      label: 'Blue Score',       fmt: v => v.toFixed(3) },
-      { key: 'park_area_sqm',   label: 'Park Area',        fmt: v => (v / 1e6).toFixed(3) + ' km²', skipZero: true },
-      { key: 'water_area_sqm',  label: 'Water Area',       fmt: v => (v / 1e6).toFixed(3) + ' km²', skipZero: true },
-    ],
-  },
-  {
-    id: 'demographic',
-    label: 'Demographics',
-    description: 'Population size, income and economic activity by neighbourhood.',
-    metrics: [
-      { key: 'avg_income', label: 'Avg. Income',      low: [20, 10, 40], high: [224, 64, 251], pct: [5, 95] },
-      { key: 'pop_total',  label: 'Total Population', low: [10, 25, 45], high: [255, 110, 64], pct: [5, 95] },
-      { key: 'employed',   label: 'Employed Count',   low: [10, 26, 35], high: [0, 188, 212],  pct: [5, 95] },
-    ],
-    statFields: [
-      { key: 'pop_total',  label: 'Total Population',   fmt: v => Math.round(v).toLocaleString() },
-      { key: 'pop_18plus', label: 'Adults (18+)',        fmt: v => Math.round(v).toLocaleString() },
-      { key: 'pop_18_6',   label: 'Working Age (18–65)', fmt: v => Math.round(v).toLocaleString() },
-      { key: 'avg_income', label: 'Avg. Income (R/yr)', fmt: v => 'R ' + Math.round(v).toLocaleString() },
-      { key: 'edu_total',  label: 'Educated (est.)',    fmt: v => Math.round(v).toLocaleString() },
-      { key: 'employed',   label: 'Employed',           fmt: v => Math.round(v).toLocaleString() },
-    ],
-  },
-  {
-    id: 'lighting',
-    label: 'Lighting',
-    description: 'Street lighting density and wattage infrastructure per neighbourhood.',
-    metrics: [
-      { key: 'lights_per_sqkm',   label: 'Lights / km²',      low: [20, 15, 0],  high: [255, 215, 64], pct: [5, 95] },
-      { key: '_wattage_per_sqkm', label: 'Wattage / km²',     low: [18, 10, 0],  high: [255, 145, 0],  pct: [5, 95] },
-      { key: '_avg_wattage',      label: 'Avg. Watts / Light', low: [10, 10, 10], high: [255, 241, 118], pct: [5, 95] },
-    ],
-    statFields: [
-      { key: 'total_lights',      label: 'Total Lights',       fmt: v => Math.round(v).toLocaleString() },
-      { key: 'total_wattage',     label: 'Total Wattage',      fmt: v => Math.round(v).toLocaleString() + ' W' },
-      { key: 'lights_per_sqkm',   label: 'Lights / km²',       fmt: v => v.toFixed(1) },
-      { key: '_wattage_per_sqkm', label: 'Wattage / km²',      fmt: v => Math.round(v).toLocaleString() + ' W' },
-      { key: '_avg_wattage',      label: 'Avg. Watts / Light', fmt: v => v.toFixed(1) + ' W' },
-    ],
-  },
-  {
-    id: 'density',
-    label: 'Density',
-    description: 'Population density relative to neighbourhood size.',
-    metrics: [
-      { key: '_pop_density', label: 'Pop. / km²', low: [10, 10, 10], high: [255, 64, 129], pct: [5, 90] },
-    ],
-    statFields: [
-      { key: 'pop_total',    label: 'Total Population',   fmt: v => Math.round(v).toLocaleString() },
-      { key: '_pop_density', label: 'Pop. Density',       fmt: v => Math.round(v).toLocaleString() + ' /km²' },
-      { key: 'nb_area_sqm',  label: 'Neighbourhood Area', fmt: v => (v / 1e6).toFixed(3) + ' km²' },
-      { key: 'pop_18plus',   label: 'Adults (18+)',        fmt: v => Math.round(v).toLocaleString() },
-      { key: 'pop_18_6',     label: 'Working Age',        fmt: v => Math.round(v).toLocaleString() },
-      { key: 'WardID',       label: 'Ward',               fmt: v => '#' + v },
-    ],
-  },
-]
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function rgbToHex([r, g, b]) {
-  return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')
+const BASE_MAP_VIEW = {
+  center: [18.56, -33.95],
+  zoom: 10.1,
+  pitch: 22,
+  bearing: -10
 }
 
-// Returns [min, max] optionally clipped to percentiles [loP, hiP]
-function computeRange(features, key, pct) {
-  const vals = features
-    .map(f => f.properties[key])
-    .filter(v => v != null && isFinite(v) && v > 0) // exclude zeros/nulls from range
-    .sort((a, b) => a - b)
-  if (!vals.length) return [0, 1]
-  if (!pct) return [vals[0], vals[vals.length - 1]]
-  const lo = vals[Math.floor((pct[0] / 100) * (vals.length - 1))]
-  const hi = vals[Math.floor((pct[1] / 100) * (vals.length - 1))]
-  return [lo, hi]
+const FEATURE_SOURCE_ID = 'cpt-atlas'
+const FEATURE_FILL_ID = 'cpt-atlas-fill'
+const FEATURE_OUTLINE_ID = 'cpt-atlas-outline'
+const FEATURE_LABEL_ID = 'cpt-atlas-label'
+
+const DECIMAL_FORMATTER = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 1 })
+const INTEGER_FORMATTER = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0 })
+const COMPACT_FORMATTER = new Intl.NumberFormat('en-ZA', { notation: 'compact', maximumFractionDigits: 1 })
+const CURRENCY_FORMATTER = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', maximumFractionDigits: 0 })
+
+const WATER_LABELS = {
+  'Piped (tap) water inside the dwelling/house': 'Inside the home',
+  'Piped (tap) water inside the yard': 'Inside the yard',
+  'Piped water from neighbour': 'From a neighbour',
+  'Piped water from community stand': 'Community stand'
 }
 
-function makeColorExpression(key, min, max, low, high) {
-  const mid = rgbToHex(low.map((c, i) => Math.round(c * 0.25 + high[i] * 0.75)))
-  return [
-    'interpolate', ['linear'],
-    ['max', min, ['min', max, ['get', key]]], // clamp to range
-    min, rgbToHex(low),
-    min + (max - min) * 0.5, mid,
-    max, rgbToHex(high),
-  ]
+const REFUSE_LABELS = {
+  'Removed by local authority/private company/community members at least once a week': 'Collected weekly',
+  'Removed by local authority/private company/community members less often than once a week': 'Collected less often',
+  'Communal refuse dump': 'Communal dump',
+  'Communal container/central collection point': 'Collection point',
+  'Own refuse dump': 'Own dump',
+  'Dump or leave rubbish anywhere (no rubbish disposal)': 'No safe disposal',
+  Other: 'Other'
 }
 
-// Injects computed fields into the feature properties
-function enrichFeatures(features) {
-  return features.map(f => {
-    const p = f.properties
-    const area_sqkm = (p.nb_area_sqm || 0) / 1e6
-    return {
-      ...f,
-      properties: {
-        ...p,
-        _pop_density:      area_sqkm > 0 ? p.pop_total / area_sqkm : 0,
-        _wattage_per_sqkm: area_sqkm > 0 ? p.total_wattage / area_sqkm : 0,
-        _avg_wattage:      p.total_lights > 0 ? p.total_wattage / p.total_lights : 0,
-      }
-    }
-  })
+const ELECTRICITY_LABELS = {
+  'In-house prepaid meter': 'Prepaid meter',
+  'In-house conventional meter (municipal electricity that is paid with rates or a bill)': 'Conventional meter',
+  'Connection from elsewhere (including direct to overhead cables)': 'Shared or informal connection',
+  'Connection from the main house (only for backyard dwellers)': 'Connected from main house'
 }
 
-// City-wide aggregate stats for the bottom bar
-function computeCityStats(features) {
-  const pop    = features.reduce((s, f) => s + (f.properties.pop_total || 0), 0)
-  const area   = features.reduce((s, f) => s + (f.properties.nb_area_sqm || 0), 0)
-  const lights = features.reduce((s, f) => s + (f.properties.total_lights || 0), 0)
-  const parks  = features.reduce((s, f) => s + (f.properties.park_area_sqm || 0), 0)
-  const incomes = features.map(f => f.properties.avg_income).filter(Boolean)
-  const avgIncome = incomes.length ? incomes.reduce((s, v) => s + v, 0) / incomes.length : 0
-  return {
-    count:     features.length,
-    pop:       Math.round(pop),
-    areaSqkm:  (area / 1e6).toFixed(0),
-    lights:    Math.round(lights),
-    parksSqkm: (parks / 1e6).toFixed(1),
-    avgIncome: Math.round(avgIncome),
+const COOKING_LABELS = {
+  Mains: 'Mains electricity',
+  Gas: 'Gas',
+  Paraffin: 'Paraffin',
+  Wood: 'Wood',
+  Solar: 'Solar',
+  Coal: 'Coal',
+  Other: 'Other',
+  None: 'None'
+}
+
+const HUNGER_ORDER = ['Never', 'Seldom', 'Sometimes', 'Often', 'Always']
+
+const LENS_CONFIG = {
+  neighbourhoods: {
+    id: 'neighbourhoods',
+    badge: 'Neighbourhood Lens',
+    label: 'Neighbourhoods',
+    title: 'Neighbourhood fabric',
+    subtitle: 'Population, liveability, lighting and green-blue access across Cape Town.',
+    datasetPath: '/data/CPT/master_neighbourhoods_enriched.geojson',
+    nameKey: 'display_name',
+    searchPlaceholder: 'Search neighbourhoods...',
+    metrics: [
+      { key: 'GreenBlue_Score', label: 'Nature Access Score', description: 'Combined access to green and blue amenities.', format: 'score', low: '#0f2b2b', high: '#3ce29f' },
+      { key: 'Green_Score', label: 'Green Space Score', description: 'Tree, park and vegetation strength.', format: 'score', low: '#112414', high: '#70f29f' },
+      { key: 'Blue_Score', label: 'Blue Space Score', description: 'Water-edge and blue infrastructure score.', format: 'score', low: '#0f2440', high: '#5cb8ff' },
+      { key: 'pop_total', label: 'Population', description: 'Estimated total residents.', format: 'integer', low: '#24183f', high: '#ff8b65' },
+      { key: 'population_density', label: 'Population Density', description: 'Residents per square kilometre.', format: 'density', low: '#1d1236', high: '#ff5b7a' },
+      { key: 'avg_income', label: 'Average Income', description: 'Estimated average personal income.', format: 'currency', low: '#34210d', high: '#ffc864' },
+      { key: 'employed', label: 'Employed Residents', description: 'Estimated employed residents.', format: 'integer', low: '#10283a', high: '#4ed5ff' },
+      { key: 'lights_per_sqkm', label: 'Street Lights per km²', description: 'Lighting intensity of the built environment.', format: 'decimal', low: '#2b1e08', high: '#ffe37c' }
+    ],
+    detailStats: [
+      { key: 'pop_total', label: 'Population', format: 'integer' },
+      { key: 'population_density', label: 'Population Density', format: 'density' },
+      { key: 'avg_income', label: 'Average Income', format: 'currency' },
+      { key: 'employed', label: 'Employed Residents', format: 'integer' },
+      { key: 'hh_count', label: 'Households', format: 'integer' },
+      { key: 'GreenBlue_Score', label: 'Nature Access Score', format: 'score' },
+      { key: 'Green_Score', label: 'Green Space Score', format: 'score' },
+      { key: 'Blue_Score', label: 'Blue Space Score', format: 'score' },
+      { key: 'total_lights', label: 'Total Street Lights', format: 'integer' },
+      { key: 'park_area_sqm', label: 'Park Area', format: 'area' }
+    ]
+  },
+  suburbs: {
+    id: 'suburbs',
+    badge: 'Planning Suburbs',
+    label: 'Planning Suburbs',
+    title: 'Household services',
+    subtitle: 'Service access, mobility and public facility use at planning suburb level.',
+    datasetPath: '/data/CPT/master_planning_suburbs_enriched.geojson',
+    nameKey: 'display_name',
+    searchPlaceholder: 'Search planning suburbs...',
+    metrics: [
+      { key: 'pct_households_piped_water_inside_dwelling', label: 'Water Inside the Home', description: 'Share of households with a tap inside the home.', format: 'percent', low: '#1c1a42', high: '#53b6ff' },
+      { key: 'pct_households_refuse_removed_weekly', label: 'Weekly Refuse Removal', description: 'Share of households receiving weekly refuse collection.', format: 'percent', low: '#2c170f', high: '#ffbb6b' },
+      { key: 'pct_households_cooking_mains', label: 'Cooking With Mains Electricity', description: 'Households using mains electricity for cooking.', format: 'percent', low: '#132434', high: '#4bd8ff' },
+      { key: 'pct_households_cooking_gas', label: 'Cooking With Gas', description: 'Households using gas for cooking.', format: 'percent', low: '#2c180f', high: '#ff9963' },
+      { key: 'pct_commuters_under_30_minutes', label: 'Commutes Under 30 Minutes', description: 'Residents with shorter daily travel times.', format: 'percent', low: '#12261e', high: '#49e7a6' },
+      { key: 'pct_commuters_mode_walking', label: 'Walking to Work or School', description: 'Share of commuters travelling on foot.', format: 'percent', low: '#171d38', high: '#8b8cff' },
+      { key: 'pct_public_facility_use_park_monthly_within_suburb', label: 'Monthly Park Use', description: 'Residents using a park within the suburb each month.', format: 'percent', low: '#152116', high: '#9bff7e' },
+      { key: 'pct_public_facility_use_library_monthly_within_suburb', label: 'Monthly Library Use', description: 'Residents using a library within the suburb each month.', format: 'percent', low: '#1f1735', high: '#d391ff' }
+    ],
+    detailStats: [
+      { key: 'pct_households_piped_water_inside_dwelling', label: 'Water Inside the Home', format: 'percent' },
+      { key: 'pct_households_refuse_removed_weekly', label: 'Weekly Refuse Removal', format: 'percent' },
+      { key: 'pct_households_cooking_mains', label: 'Cooking With Mains Electricity', format: 'percent' },
+      { key: 'pct_households_cooking_gas', label: 'Cooking With Gas', format: 'percent' },
+      { key: 'pct_commuters_under_30_minutes', label: 'Commutes Under 30 Minutes', format: 'percent' },
+      { key: 'pct_commuters_mode_walking', label: 'Walking to Work or School', format: 'percent' },
+      { key: 'pct_public_facility_use_park_monthly_within_suburb', label: 'Monthly Park Use', format: 'percent' },
+      { key: 'pct_public_facility_use_library_monthly_within_suburb', label: 'Monthly Library Use', format: 'percent' }
+    ]
+  },
+  economy: {
+    id: 'economy',
+    badge: 'Economic Hexagons',
+    label: 'Economic Hexagons',
+    title: 'Economic activity',
+    subtitle: 'Formal employment, establishments, income and growth hotspots by tax hexagon.',
+    datasetPath: '/data/CPT/master_tax_hexagons_enriched.geojson',
+    nameKey: 'display_name',
+    searchPlaceholder: 'Search hexagons...',
+    metrics: [
+      { key: 'tax_employment_latest', label: 'Formal Jobs', description: 'Estimated formal jobs in the latest year.', format: 'integer', low: '#11243a', high: '#48d0ff' },
+      { key: 'tax_establishments_latest', label: 'Registered Establishments', description: 'Estimated registered establishments in the latest year.', format: 'integer', low: '#36210e', high: '#ffbf6c' },
+      { key: 'tax_median_income_latest', label: 'Median Income', description: 'Median income in the latest year.', format: 'currency', low: '#26163b', high: '#d191ff' },
+      { key: 'tax_jobs_per_establishment_latest', label: 'Jobs per Establishment', description: 'Average number of jobs per establishment.', format: 'decimal', low: '#102d24', high: '#42e8ab' },
+      { key: 'tax_employment_pct_change_2014_2025', label: 'Employment Growth Since 2014', description: 'Percentage change in employment between 2014 and 2025.', format: 'signedPercent', low: '#251414', high: '#ff7c68' },
+      { key: 'tax_establishments_pct_change_2014_2025', label: 'Business Growth Since 2014', description: 'Percentage change in establishments between 2014 and 2025.', format: 'signedPercent', low: '#24160e', high: '#ffc461' },
+      { key: 'tax_youth_fte_share', label: 'Youth Employment Share', description: 'Share of jobs held by young people.', format: 'percent', low: '#142038', high: '#63a8ff' },
+      { key: 'tax_female_fte_share', label: 'Female Employment Share', description: 'Share of jobs held by women.', format: 'percent', low: '#321739', high: '#ff93c8' }
+    ],
+    detailStats: [
+      { key: 'tax_employment_2014', label: 'Jobs in 2014', format: 'integer' },
+      { key: 'tax_employment_2025', label: 'Jobs in 2025', format: 'integer' },
+      { key: 'tax_employment_pct_change_2014_2025', label: 'Employment Growth', format: 'signedPercent' },
+      { key: 'tax_establishments_2014', label: 'Businesses in 2014', format: 'integer' },
+      { key: 'tax_establishments_2025', label: 'Businesses in 2025', format: 'integer' },
+      { key: 'tax_establishments_pct_change_2014_2025', label: 'Business Growth', format: 'signedPercent' },
+      { key: 'tax_median_income_2014', label: 'Median Income in 2014', format: 'currency' },
+      { key: 'tax_median_income_2025', label: 'Median Income in 2025', format: 'currency' },
+      { key: 'tax_jobs_per_establishment_latest', label: 'Jobs per Establishment', format: 'decimal' },
+      { key: 'tax_female_fte_share', label: 'Female Employment Share', format: 'percent' }
+    ]
   }
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+const DEFAULT_METRIC_BY_LENS = {
+  neighbourhoods: 'GreenBlue_Score',
+  suburbs: 'pct_households_piped_water_inside_dwelling',
+  economy: 'tax_employment_latest'
+}
+
+function parseCsvLine(line) {
+  const cells = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i]
+    const next = line[i + 1]
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"'
+      i += 1
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes
+      continue
+    }
+
+    if (char === ',' && !inQuotes) {
+      cells.push(current)
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  cells.push(current)
+  return cells.map(cell => cell.trim())
+}
+
+function parseValue(value) {
+  if (value === null || value === undefined || value === '') return null
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : value
+}
+
+function parseCsvText(text) {
+  const lines = text
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+
+  if (!lines.length) return []
+
+  const headers = parseCsvLine(lines[0])
+  return lines.slice(1).map((line) => {
+    const values = parseCsvLine(line)
+    return headers.reduce((row, header, index) => {
+      row[header] = parseValue(values[index] ?? '')
+      return row
+    }, {})
+  })
+}
+
+function normalizeName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function toTitleCase(value) {
+  return String(value || '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function smartPercentValue(value) {
+  if (!Number.isFinite(value)) return null
+  return Math.abs(value) <= 1.5 ? value * 100 : value
+}
+
+function formatMetricValue(format, rawValue) {
+  if (!Number.isFinite(rawValue)) return 'No data'
+
+  switch (format) {
+    case 'currency':
+      return CURRENCY_FORMATTER.format(rawValue)
+    case 'percent':
+      return `${DECIMAL_FORMATTER.format(smartPercentValue(rawValue))}%`
+    case 'signedPercent': {
+      const value = smartPercentValue(rawValue)
+      const sign = value > 0 ? '+' : ''
+      return `${sign}${DECIMAL_FORMATTER.format(value)}%`
+    }
+    case 'density':
+      return `${DECIMAL_FORMATTER.format(rawValue)} / km²`
+    case 'score':
+      return DECIMAL_FORMATTER.format(rawValue)
+    case 'area':
+      return `${DECIMAL_FORMATTER.format(rawValue / 1e6)} km²`
+    case 'decimal':
+      return DECIMAL_FORMATTER.format(rawValue)
+    case 'compact':
+      return COMPACT_FORMATTER.format(rawValue)
+    case 'integer':
+    default:
+      return INTEGER_FORMATTER.format(rawValue)
+  }
+}
+
+function formatAxisTick(value) {
+  if (!Number.isFinite(value)) return value
+  if (Math.abs(value) >= 1000) return COMPACT_FORMATTER.format(value)
+  return DECIMAL_FORMATTER.format(value)
+}
+
+function mixHexColors(startHex, endHex, weight = 0.5) {
+  const toRgb = (hex) => {
+    const value = hex.replace('#', '')
+    const sized = value.length === 3 ? value.split('').map((part) => part + part).join('') : value
+    return [
+      parseInt(sized.slice(0, 2), 16),
+      parseInt(sized.slice(2, 4), 16),
+      parseInt(sized.slice(4, 6), 16)
+    ]
+  }
+
+  const [r1, g1, b1] = toRgb(startHex)
+  const [r2, g2, b2] = toRgb(endHex)
+  const mix = (a, b) => Math.round(a + ((b - a) * weight))
+  return `rgb(${mix(r1, r2)}, ${mix(g1, g2)}, ${mix(b1, b2)})`
+}
+
+function computeMetricRange(features, key) {
+  const allValues = features
+    .map((feature) => Number(feature.properties?.[key]))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b)
+
+  if (!allValues.length) return [0, 1]
+
+  const positiveValues = allValues.filter((value) => value > 0)
+  const values = positiveValues.length >= Math.min(12, allValues.length) ? positiveValues : allValues
+  const pickPercentile = (percentile) => values[Math.max(0, Math.min(values.length - 1, Math.floor((values.length - 1) * percentile)))]
+  const min = pickPercentile(0.08)
+  const max = pickPercentile(0.92)
+  if (min === max) return [min, min + 1]
+  return [min, max]
+}
+
+function isMeaningfulMetricValue(value, format = 'integer') {
+  if (!Number.isFinite(value)) return false
+  if (format === 'signedPercent') return value !== 0
+  return value > 0
+}
+
+function getMeaningfulFeatureValues(features, key, format = 'integer') {
+  return features
+    .map((feature) => Number(feature.properties?.[key]))
+    .filter((value) => isMeaningfulMetricValue(value, format))
+}
+
+function sumMeaningfulFeatureValues(features, key, format = 'integer') {
+  return getMeaningfulFeatureValues(features, key, format).reduce((sum, value) => sum + value, 0)
+}
+
+function averageMeaningfulFeatureValue(features, key, format = 'integer') {
+  const values = getMeaningfulFeatureValues(features, key, format)
+  if (!values.length) return null
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function buildFillColorExpression(metric, range) {
+  const [min, max] = range
+  const midpoint = min + ((max - min) * 0.5)
+  return [
+    'interpolate',
+    ['linear'],
+    ['coalesce', ['get', metric.key], min],
+    min, metric.low,
+    midpoint, mixHexColors(metric.low, metric.high, 0.55),
+    max, metric.high
+  ]
+}
+
+function buildMetricVisibilityFilter(metricKey) {
+  return [
+    'all',
+    ['!=', ['coalesce', ['get', metricKey], null], null],
+    ['>', ['coalesce', ['get', metricKey], 0], 0]
+  ]
+}
+
+function traverseCoordinates(coordinates, callback) {
+  if (!Array.isArray(coordinates)) return
+  if (typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
+    callback(coordinates)
+    return
+  }
+  coordinates.forEach((coordinate) => traverseCoordinates(coordinate, callback))
+}
+
+function getFeatureBounds(feature) {
+  let minLng = Infinity
+  let minLat = Infinity
+  let maxLng = -Infinity
+  let maxLat = -Infinity
+
+  traverseCoordinates(feature.geometry?.coordinates, ([lng, lat]) => {
+    minLng = Math.min(minLng, lng)
+    minLat = Math.min(minLat, lat)
+    maxLng = Math.max(maxLng, lng)
+    maxLat = Math.max(maxLat, lat)
+  })
+
+  return [[minLng, minLat], [maxLng, maxLat]]
+}
+
+function enrichNeighbourhoodCollection(collection) {
+  return {
+    ...collection,
+    features: (collection.features || []).map((feature) => {
+      const properties = feature.properties || {}
+      const areaKm2 = Number(properties.nb_area_sqm || 0) / 1e6
+      const population = Number(properties.pop_total || 0)
+      return {
+        ...feature,
+        id: String(properties.neighbourhood),
+        properties: {
+          ...properties,
+          __featureId: String(properties.neighbourhood),
+          display_name: properties.neighbourhood,
+          population_density: areaKm2 > 0 ? population / areaKm2 : 0
+        }
+      }
+    })
+  }
+}
+
+function enrichSuburbCollection(collection) {
+  return {
+    ...collection,
+    features: (collection.features || []).map((feature) => {
+      const properties = feature.properties || {}
+      const commuteUnder30 = Number(properties.pct_commuters_travel_time_less_than_15_minutes || 0) +
+        Number(properties.pct_commuters_travel_time_15_30_minutes || 0)
+      const suburbName = toTitleCase(properties.suburb)
+      return {
+        ...feature,
+        id: String(properties.GlobalID || properties.suburb),
+        properties: {
+          ...properties,
+          __featureId: String(properties.GlobalID || properties.suburb),
+          display_name: suburbName,
+          suburb_lookup: normalizeName(properties.suburb),
+          pct_commuters_under_30_minutes: commuteUnder30
+        }
+      }
+    })
+  }
+}
+
+function enrichEconomyCollection(collection) {
+  return {
+    ...collection,
+    features: (collection.features || []).map((feature) => {
+      const properties = feature.properties || {}
+      return {
+        ...feature,
+        id: String(properties.hex7),
+        properties: {
+          ...properties,
+          __featureId: String(properties.hex7),
+          display_name: `Hex ${properties.hex7}`,
+          tax_employment_latest: Number(properties.tax_employment_latest ?? properties.tax_employment_2025 ?? 0),
+          tax_establishments_latest: Number(properties.tax_establishments_latest ?? properties.tax_establishments_2025 ?? 0),
+          tax_median_income_latest: Number(properties.tax_median_income_latest ?? properties.tax_median_income_2025 ?? 0)
+        }
+      }
+    })
+  }
+}
+
+function enrichCollection(lensId, collection) {
+  if (lensId === 'neighbourhoods') return enrichNeighbourhoodCollection(collection)
+  if (lensId === 'suburbs') return enrichSuburbCollection(collection)
+  if (lensId === 'economy') return enrichEconomyCollection(collection)
+  return collection
+}
+
+function truncateLabel(value, max = 18) {
+  const text = String(value || '')
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+function CustomChartTooltip({ active, payload, label, formatters = {} }) {
+  if (!active || !payload?.length) return null
+
+  return (
+    <div className="we-chart-tooltip">
+      <div className="we-chart-tooltip-title">{label}</div>
+      {payload.map((entry) => {
+        const formatter = formatters[entry.dataKey]
+        const value = formatter ? formatter(entry.value) : formatAxisTick(entry.value)
+        return (
+          <div key={entry.dataKey} className="we-chart-tooltip-row">
+            <span className="we-chart-tooltip-dot" style={{ background: entry.color }} />
+            <span>{entry.name}</span>
+            <strong>{value}</strong>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function StoryToggle({ options, value, onChange }) {
+  return (
+    <div className="we-story-toggle">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          className={`we-story-toggle-btn ${value === option.value ? 'we-story-toggle-btn--active' : ''}`}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function RankingChart({ data, metric }) {
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, left: 14, bottom: 4 }}>
+        <CartesianGrid stroke="rgba(255,255,255,0.07)" horizontal={false} />
+        <XAxis
+          type="number"
+          tick={{ fill: 'rgba(236, 243, 255, 0.55)', fontSize: 11 }}
+          axisLine={false}
+          tickLine={false}
+          tickFormatter={formatAxisTick}
+        />
+        <YAxis
+          type="category"
+          dataKey="name"
+          width={110}
+          tick={{ fill: 'rgba(236, 243, 255, 0.7)', fontSize: 11 }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip content={<CustomChartTooltip formatters={{ value: (value) => formatMetricValue(metric.format, value) }} />} />
+        <Bar dataKey="value" name={metric.label} fill={metric.high} radius={[0, 8, 8, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function OverviewStat({ label, value, hint }) {
+  return (
+    <div className="we-overview-stat">
+      <span className="we-overview-stat-label">{label}</span>
+      <strong className="we-overview-stat-value">{value}</strong>
+      {hint ? <span className="we-overview-stat-hint">{hint}</span> : null}
+    </div>
+  )
+}
+
+function DetailRow({ label, value, delta }) {
+  if (value === 'No data') return null
+  return (
+    <div className="we-detail-row">
+      <span className="we-detail-row-label">{label}</span>
+      <div className="we-detail-row-right">
+        <span className="we-detail-row-value">{value}</span>
+        {delta ? <span className={`we-detail-row-delta ${delta.positive ? 'we-detail-row-delta--positive' : 'we-detail-row-delta--negative'}`}>{delta.label}</span> : null}
+      </div>
+    </div>
+  )
+}
+
 export default function WardExplorer({ onEnterDashboard }) {
   const mapRef = useRef(null)
-  const mapEl  = useRef(null)
-  const hoveredIdRef = useRef(null)  // avoids stale closure in mapbox handlers
+  const mapEl = useRef(null)
+  const hoveredFeatureIdRef = useRef(null)
+  const selectedFeatureIdRef = useRef(null)
+  const initialHashRef = useRef(null)
+  const activeCollectionRef = useRef(null)
 
-  const [rawGeoJSON,     setRawGeoJSON]     = useState(null)
-  const [mapLoaded,      setMapLoaded]      = useState(false)
-  const [activeTab,      setActiveTab]      = useState(0)
-  const [activeMetricIdx,setActiveMetricIdx]= useState(0)
-  const [selectedWard,   setSelectedWard]   = useState(null)
-  const [hoveredWardId,  setHoveredWardId]  = useState(null)
-  const [hoveredPos,     setHoveredPos]     = useState({ x: 0, y: 0 })
-  const [searchQuery,    setSearchQuery]    = useState('')
-  const [searchOpen,     setSearchOpen]     = useState(false)
-  const [copied,         setCopied]         = useState(false)
-  const [pendingWard,    setPendingWard]    = useState(null)
+  const [mapLoaded, setMapLoaded] = useState(false)
+  const [collections, setCollections] = useState({})
+  const [csvData, setCsvData] = useState({
+    water: [],
+    refuse: [],
+    hunger: [],
+    materials: [],
+    cooking: [],
+    electricity: []
+  })
+  const [activeLensId, setActiveLensId] = useState('neighbourhoods')
+  const [metricByLens, setMetricByLens] = useState(DEFAULT_METRIC_BY_LENS)
+  const [selectedFeatureId, setSelectedFeatureId] = useState(null)
+  const [hoveredFeatureId, setHoveredFeatureId] = useState(null)
+  const [hoveredPos, setHoveredPos] = useState({ x: 0, y: 0 })
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [neighbourhoodStory, setNeighbourhoodStory] = useState('water')
+  const [suburbStory, setSuburbStory] = useState('cooking')
+  const [economyStory, setEconomyStory] = useState('trend')
+  const [materialType, setMaterialType] = useState('Wall')
+  const [isHeroCollapsed, setIsHeroCollapsed] = useState(false)
+  const [isThemePanelCollapsed, setIsThemePanelCollapsed] = useState(false)
+  const [isDetailMinimized, setIsDetailMinimized] = useState(false)
+  const [isAnalyticsCollapsed, setIsAnalyticsCollapsed] = useState(true)
 
-  // Fetch neighbourhood data once
   useEffect(() => {
-    fetch('/data/CPT/master_neighbourhoods_enriched.geojson')
-      .then(r => r.json())
-      .then(data => setRawGeoJSON(data))
-      .catch(err => console.error('Failed to load neighbourhoods:', err))
+    initialHashRef.current = new URLSearchParams(window.location.hash.slice(1))
   }, [])
 
-  // Enrich and memoize data
-  const geojson = useMemo(() => {
-    if (!rawGeoJSON) return null
-    return { ...rawGeoJSON, features: enrichFeatures(rawGeoJSON.features) }
-  }, [rawGeoJSON])
-
-  const cityStats = useMemo(() => geojson ? computeCityStats(geojson.features) : null, [geojson])
-
-  // Pre-compute per-metric ranges once (respecting pct clipping)
-  const metricRanges = useMemo(() => {
-    if (!geojson) return {}
-    const ranges = {}
-    TABS.forEach(tab => tab.metrics.forEach(m => {
-      ranges[m.key] = computeRange(geojson.features, m.key, m.pct)
-    }))
-    return ranges
-  }, [geojson])
-
-  const tab    = TABS[activeTab]
-  const metric = tab.metrics[activeMetricIdx]
-
-  // City-wide field averages — for ward vs city comparison
-  const cityAverages = useMemo(() => {
-    if (!geojson) return {}
-    const fields = [...new Set(TABS.flatMap(t => t.statFields.map(sf => sf.key)))]
-    const avgs = {}
-    fields.forEach(key => {
-      const vals = geojson.features
-        .map(f => f.properties[key])
-        .filter(v => v != null && isFinite(v) && v > 0)
-      if (vals.length) avgs[key] = vals.reduce((s, v) => s + v, 0) / vals.length
-    })
-    return avgs
-  }, [geojson])
-
-  // Hovered ward properties for tooltip
-  const hoveredWardProps = useMemo(() => {
-    if (!hoveredWardId || !geojson) return null
-    return geojson.features.find(f => f.properties.neighbourhood === hoveredWardId)?.properties ?? null
-  }, [hoveredWardId, geojson])
-
-  // Search results
-  const searchResults = useMemo(() => {
-    if (!geojson || !searchQuery.trim()) return []
-    const q = searchQuery.toLowerCase()
-    return geojson.features
-      .filter(f => f.properties.neighbourhood?.toLowerCase().includes(q))
-      .slice(0, 6)
-  }, [geojson, searchQuery])
-
-  // ── Init map (waits for geojson) ──────────────────────────────────────────
   useEffect(() => {
-    if (!geojson) return
-    if (mapRef.current) {
-      // Map already exists — just update the source data
-      if (mapRef.current.getSource('wards')) {
-        mapRef.current.getSource('wards').setData(geojson)
+    const loadData = async () => {
+      try {
+        const geojsonEntries = await Promise.all(
+          Object.values(LENS_CONFIG).map(async (lens) => {
+            const response = await fetch(lens.datasetPath)
+            const collection = await response.json()
+            return [lens.id, enrichCollection(lens.id, collection)]
+          })
+        )
+
+        const csvEntries = await Promise.all([
+          fetch('/data/CPT/access_to_water_data_2026-03-18.csv').then((response) => response.text()).then(parseCsvText),
+          fetch('/data/CPT/2024_CCT_Survey_refuse_data_2026-03-18%20(1).csv').then((response) => response.text()).then(parseCsvText),
+          fetch('/data/CPT/CCT_Survey_2024_adult_hunger2026-03-18.csv').then((response) => response.text()).then(parseCsvText),
+          fetch('/data/CPT/2024_CCT_Survey_Building_Materials2026-03-18.csv').then((response) => response.text()).then(parseCsvText),
+          fetch('/data/CPT/2024_CCT_Survey_cooking_data_2026-03-18.csv').then((response) => response.text()).then(parseCsvText),
+          fetch('/data/CPT/2024_CCT_Survey_elect_main_source_2026-03-18.csv').then((response) => response.text()).then(parseCsvText)
+        ])
+
+        setCollections(Object.fromEntries(geojsonEntries))
+        setCsvData({
+          water: csvEntries[0],
+          refuse: csvEntries[1],
+          hunger: csvEntries[2],
+          materials: csvEntries[3],
+          cooking: csvEntries[4],
+          electricity: csvEntries[5]
+        })
+      } catch (error) {
+        console.error('Failed to load CPT atlas data:', error)
       }
-      return
     }
-    mapRef.current = new mapboxgl.Map({
+
+    loadData()
+  }, [])
+
+  const activeLens = LENS_CONFIG[activeLensId]
+  const activeCollection = collections[activeLensId] || null
+  const activeMetricKey = metricByLens[activeLensId]
+  const activeMetric = activeLens.metrics.find((metric) => metric.key === activeMetricKey) || activeLens.metrics[0]
+
+  const metricRanges = useMemo(() => {
+    const ranges = {}
+    Object.entries(collections).forEach(([lensId, collection]) => {
+      const lens = LENS_CONFIG[lensId]
+      const featureRanges = {}
+      lens.metrics.forEach((metric) => {
+        featureRanges[metric.key] = computeMetricRange(collection.features || [], metric.key)
+      })
+      ranges[lensId] = featureRanges
+    })
+    return ranges
+  }, [collections])
+
+  const activeFeatures = activeCollection?.features || []
+
+  useEffect(() => {
+    activeCollectionRef.current = activeCollection
+  }, [activeCollection])
+
+  useEffect(() => {
+    if (selectedFeatureId) {
+      setIsHeroCollapsed(true)
+      setIsThemePanelCollapsed(true)
+      setIsDetailMinimized(false)
+      setIsAnalyticsCollapsed(true)
+    }
+  }, [selectedFeatureId])
+
+  const selectedFeature = useMemo(
+    () => activeFeatures.find((feature) => String(feature.id) === String(selectedFeatureId)) || null,
+    [activeFeatures, selectedFeatureId]
+  )
+
+  const hoveredFeature = useMemo(
+    () => activeFeatures.find((feature) => String(feature.id) === String(hoveredFeatureId)) || null,
+    [activeFeatures, hoveredFeatureId]
+  )
+
+  const rankedFeatures = useMemo(() => {
+    return [...activeFeatures]
+      .filter((feature) => isMeaningfulMetricValue(Number(feature.properties?.[activeMetric.key]), activeMetric.format))
+      .sort((a, b) => Number(b.properties?.[activeMetric.key]) - Number(a.properties?.[activeMetric.key]))
+  }, [activeFeatures, activeMetric.format, activeMetric.key])
+
+  const focusFeature = selectedFeature || rankedFeatures[0] || null
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const query = normalizeName(searchQuery)
+    return activeFeatures
+      .filter((feature) => normalizeName(feature.properties?.display_name).includes(query))
+      .slice(0, 8)
+  }, [activeFeatures, searchQuery])
+
+  const rankingChartData = useMemo(() => {
+    return rankedFeatures.slice(0, 8).map((feature) => ({
+      name: truncateLabel(feature.properties?.display_name, activeLensId === 'economy' ? 16 : 20),
+      value: Number(feature.properties?.[activeMetric.key] || 0)
+    }))
+  }, [rankedFeatures, activeMetric.key, activeLensId])
+
+  const cityOverviewStats = useMemo(() => {
+    if (!activeFeatures.length) return []
+
+    if (activeLensId === 'neighbourhoods') {
+      const totalPopulation = sumMeaningfulFeatureValues(activeFeatures, 'pop_total', 'integer')
+      const avgIncome = averageMeaningfulFeatureValue(activeFeatures, 'avg_income', 'currency')
+      const totalLights = sumMeaningfulFeatureValues(activeFeatures, 'total_lights', 'integer')
+      const natureLeader = rankedFeatures[0]
+      return [
+        { label: 'Neighbourhoods', value: INTEGER_FORMATTER.format(activeFeatures.length) },
+        { label: 'Population', value: COMPACT_FORMATTER.format(totalPopulation) },
+        { label: 'Average Income', value: avgIncome ? CURRENCY_FORMATTER.format(avgIncome) : 'No data' },
+        { label: 'Top Area', value: natureLeader?.properties?.display_name || 'No data', hint: activeMetric.label }
+      ]
+    }
+
+    if (activeLensId === 'suburbs') {
+      const avgWater = averageMeaningfulFeatureValue(activeFeatures, 'pct_households_piped_water_inside_dwelling', 'percent')
+      const avgRefuse = averageMeaningfulFeatureValue(activeFeatures, 'pct_households_refuse_removed_weekly', 'percent')
+      const avgCommute = averageMeaningfulFeatureValue(activeFeatures, 'pct_commuters_under_30_minutes', 'percent')
+      const topSuburb = rankedFeatures[0]
+      return [
+        { label: 'Planning Suburbs', value: INTEGER_FORMATTER.format(activeFeatures.length) },
+        { label: 'Avg Water Access', value: avgWater !== null ? formatMetricValue('percent', avgWater) : 'No data' },
+        { label: 'Avg Weekly Refuse', value: avgRefuse !== null ? formatMetricValue('percent', avgRefuse) : 'No data' },
+        { label: 'Fast Commutes', value: avgCommute !== null ? formatMetricValue('percent', avgCommute) : 'No data', hint: '< 30 minutes' },
+        { label: 'Leading Suburb', value: topSuburb?.properties?.display_name || 'No data', hint: activeMetric.label }
+      ]
+    }
+
+    const totalJobs = sumMeaningfulFeatureValues(activeFeatures, 'tax_employment_latest', 'integer')
+    const totalBusinesses = sumMeaningfulFeatureValues(activeFeatures, 'tax_establishments_latest', 'integer')
+    const avgIncome = averageMeaningfulFeatureValue(activeFeatures, 'tax_median_income_latest', 'currency')
+    const topHex = rankedFeatures[0]
+    return [
+      { label: 'Economic Hexagons', value: INTEGER_FORMATTER.format(activeFeatures.length) },
+      { label: 'Formal Jobs', value: COMPACT_FORMATTER.format(totalJobs) },
+      { label: 'Establishments', value: COMPACT_FORMATTER.format(totalBusinesses) },
+      { label: 'Median Income', value: avgIncome ? CURRENCY_FORMATTER.format(avgIncome) : 'No data' },
+      { label: 'Leading Hexagon', value: topHex?.properties?.display_name || 'No data', hint: activeMetric.label }
+    ]
+  }, [activeFeatures, activeLensId, activeMetric.label, rankedFeatures])
+
+  const averageLookup = useMemo(() => {
+    const lookup = {}
+    activeLens.detailStats.forEach((stat) => {
+      const values = getMeaningfulFeatureValues(activeFeatures, stat.key, stat.format)
+      if (!values.length) return
+      lookup[stat.key] = values.reduce((sum, value) => sum + value, 0) / values.length
+    })
+    return lookup
+  }, [activeFeatures, activeLens.detailStats])
+
+  const selectedCookingRow = useMemo(() => {
+    if (activeLensId !== 'suburbs') return null
+    const lookupName = normalizeName(focusFeature?.properties?.display_name)
+    if (!lookupName) return csvData.cooking[0] || null
+    return csvData.cooking.find((row) => normalizeName(row.Suburb) === lookupName) || null
+  }, [activeLensId, focusFeature, csvData.cooking])
+
+  const waterChartData = useMemo(() => {
+    return csvData.water
+      .filter((row) => row.Dataset === '2024 CCT Survey')
+      .map((row) => ({
+        name: WATER_LABELS[row.piped_water] || row.piped_water,
+        formal: smartPercentValue(Number(row.Formal_dwelling || 0)),
+        informal: smartPercentValue(Number(row.Informal_dwelling || 0)),
+        adi: smartPercentValue(Number(row.ADI || 0)),
+        city: smartPercentValue(Number(row['Cape Town (All dwellings)'] || 0))
+      }))
+      .sort((a, b) => b.city - a.city)
+  }, [csvData.water])
+
+  const hungerChartData = useMemo(() => {
+    const valuesByStatus = {}
+    csvData.hunger.forEach((row) => {
+      const key = row.adult_hunger
+      if (!valuesByStatus[key]) valuesByStatus[key] = { name: key, survey2024: 0, ghs2023: 0 }
+      if (row.Dataset === '2024 CCT Survey') valuesByStatus[key].survey2024 = smartPercentValue(Number(row['Cape Town (All Dwellings)'] || 0))
+      if (row.Dataset === '2023 GHS') valuesByStatus[key].ghs2023 = smartPercentValue(Number(row['Cape Town (All Dwellings)'] || 0))
+    })
+    return HUNGER_ORDER.map((status) => valuesByStatus[status]).filter(Boolean)
+  }, [csvData.hunger])
+
+  const materialChartData = useMemo(() => {
+    const filtered = csvData.materials.filter(
+      (row) => row.Dataset === '2024 CCT Survey' && row.Type === materialType
+    )
+    const total = filtered.reduce((sum, row) => sum + Number(row['Cape Town (All dwellings)'] || 0), 0)
+    return filtered
+      .map((row) => ({
+        name: truncateLabel(row['Building Material'], 16),
+        share: total > 0 ? (Number(row['Cape Town (All dwellings)'] || 0) / total) * 100 : 0
+      }))
+      .sort((a, b) => b.share - a.share)
+      .slice(0, 7)
+  }, [csvData.materials, materialType])
+
+  const cookingChartData = useMemo(() => {
+    if (!selectedCookingRow) return []
+    return Object.entries(COOKING_LABELS)
+      .map(([key, label]) => ({
+        name: label,
+        value: Number(selectedCookingRow[key] || 0)
+      }))
+      .filter((entry) => entry.value > 0)
+      .sort((a, b) => b.value - a.value)
+  }, [selectedCookingRow])
+
+  const electricityChartData = useMemo(() => {
+    const grouped = {}
+    csvData.electricity.forEach((row) => {
+      const label = ELECTRICITY_LABELS[row.elect_main_supply] || row.elect_main_supply
+      if (!grouped[label]) grouped[label] = { name: label, cct: 0, eskom: 0 }
+      if (row.SUPPLY_AUT === 'CCT') grouped[label].cct = smartPercentValue(Number(row['Cape Town'] || 0))
+      if (row.SUPPLY_AUT === 'Eskom') grouped[label].eskom = smartPercentValue(Number(row['Cape Town'] || 0))
+    })
+    return Object.values(grouped)
+      .sort((a, b) => Math.max(b.cct, b.eskom) - Math.max(a.cct, a.eskom))
+  }, [csvData.electricity])
+
+  const refuseChartData = useMemo(() => {
+    return csvData.refuse.map((row) => ({
+      name: REFUSE_LABELS[row['Refuse Removal']] || row['Refuse Removal'],
+      formal: smartPercentValue(Number(row.Formal_dwelling || 0)),
+      informal: smartPercentValue(Number(row.Informal_dwelling || 0)),
+      adi: smartPercentValue(Number(row.ADI || 0)),
+      total: smartPercentValue(Number(row.Total || 0))
+    }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 6)
+  }, [csvData.refuse])
+
+  const economyTrendData = useMemo(() => {
+    if (!focusFeature) return []
+    const properties = focusFeature.properties || {}
+    const jobBase = Number(properties.tax_employment_2014 || 0)
+    const businessBase = Number(properties.tax_establishments_2014 || 0)
+    const incomeBase = Number(properties.tax_median_income_2014 || 0)
+    const indexValue = (latest, base) => {
+      if (!Number.isFinite(latest) || !Number.isFinite(base) || base <= 0) return null
+      return (latest / base) * 100
+    }
+    return [
+      { year: '2014', jobs: 100, businesses: 100, income: 100 },
+      {
+        year: '2025',
+        jobs: indexValue(Number(properties.tax_employment_2025 || 0), jobBase),
+        businesses: indexValue(Number(properties.tax_establishments_2025 || 0), businessBase),
+        income: indexValue(Number(properties.tax_median_income_2025 || 0), incomeBase)
+      }
+    ]
+  }, [focusFeature])
+
+  const economyCompositionData = useMemo(() => {
+    if (!focusFeature) return []
+    const properties = focusFeature.properties || {}
+    return [
+      { name: 'Female jobs', value: smartPercentValue(Number(properties.tax_female_fte_share || 0)) },
+      { name: 'Youth jobs', value: smartPercentValue(Number(properties.tax_youth_fte_share || 0)) },
+      { name: 'Export-linked', value: smartPercentValue(Number(properties.tax_export_fte_share || 0)) },
+      { name: 'Import-linked', value: smartPercentValue(Number(properties.tax_import_fte_share || 0)) }
+    ]
+  }, [focusFeature])
+
+  const economyGrowthChartData = useMemo(() => {
+    return [...activeFeatures]
+      .filter((feature) => isMeaningfulMetricValue(Number(feature.properties?.tax_employment_pct_change_2014_2025), 'signedPercent'))
+      .sort((a, b) => Number(b.properties?.tax_employment_pct_change_2014_2025) - Number(a.properties?.tax_employment_pct_change_2014_2025))
+      .slice(0, 8)
+      .map((feature) => ({
+        name: truncateLabel(feature.properties?.display_name, 16),
+        growth: smartPercentValue(Number(feature.properties?.tax_employment_pct_change_2014_2025 || 0))
+      }))
+  }, [activeFeatures])
+
+  const spotlightStats = useMemo(() => {
+    if (!focusFeature) return []
+    const properties = focusFeature.properties || {}
+
+    if (activeLensId === 'neighbourhoods') {
+      return [
+        { label: 'Population', value: formatMetricValue('integer', Number(properties.pop_total || 0)) },
+        { label: 'Average Income', value: formatMetricValue('currency', Number(properties.avg_income || 0)) },
+        { label: 'Street Lights', value: formatMetricValue('integer', Number(properties.total_lights || 0)) },
+        { label: 'Nature Score', value: formatMetricValue('score', Number(properties.GreenBlue_Score || 0)) }
+      ]
+    }
+
+    if (activeLensId === 'suburbs') {
+      return [
+        { label: 'Water Inside Home', value: formatMetricValue('percent', Number(properties.pct_households_piped_water_inside_dwelling || 0)) },
+        { label: 'Weekly Refuse', value: formatMetricValue('percent', Number(properties.pct_households_refuse_removed_weekly || 0)) },
+        { label: 'Short Commutes', value: formatMetricValue('percent', Number(properties.pct_commuters_under_30_minutes || 0)) },
+        { label: 'Park Use', value: formatMetricValue('percent', Number(properties.pct_public_facility_use_park_monthly_within_suburb || 0)) }
+      ]
+    }
+
+    return [
+      { label: 'Formal Jobs', value: formatMetricValue('integer', Number(properties.tax_employment_latest || 0)) },
+      { label: 'Businesses', value: formatMetricValue('integer', Number(properties.tax_establishments_latest || 0)) },
+      { label: 'Median Income', value: formatMetricValue('currency', Number(properties.tax_median_income_latest || 0)) },
+      { label: 'Jobs per Business', value: formatMetricValue('decimal', Number(properties.tax_jobs_per_establishment_latest || 0)) }
+    ]
+  }, [activeLensId, focusFeature])
+
+  const fitFeatureOnMap = useCallback((feature) => {
+    const map = mapRef.current
+    if (!map || !feature) return
+    const bounds = getFeatureBounds(feature)
+    map.fitBounds(bounds, { padding: { top: 110, right: 360, bottom: 260, left: 320 }, duration: 700, maxZoom: activeLensId === 'economy' ? 12.4 : 13.3 })
+  }, [activeLensId])
+
+  const clearSelectedFeatureState = useCallback(() => {
+    const map = mapRef.current
+    if (!map || !map.getSource(FEATURE_SOURCE_ID) || !selectedFeatureIdRef.current) return
+    map.setFeatureState({ source: FEATURE_SOURCE_ID, id: selectedFeatureIdRef.current }, { selected: false })
+    selectedFeatureIdRef.current = null
+  }, [])
+
+  const setSelectedFeatureState = useCallback((featureId) => {
+    const map = mapRef.current
+    if (!featureId || !map || !map.getSource(FEATURE_SOURCE_ID)) return
+    if (selectedFeatureIdRef.current && selectedFeatureIdRef.current !== featureId) {
+      map.setFeatureState({ source: FEATURE_SOURCE_ID, id: selectedFeatureIdRef.current }, { selected: false })
+    }
+    map.setFeatureState({ source: FEATURE_SOURCE_ID, id: featureId }, { selected: true })
+    selectedFeatureIdRef.current = featureId
+  }, [])
+
+  const applyActiveMetricColor = useCallback((mapInstance, lensId, metricConfig, collectionOverride = null) => {
+    if (!mapInstance?.getLayer(FEATURE_FILL_ID)) return
+    const collection = collectionOverride || collections[lensId]
+    const fallbackRange = collection ? computeMetricRange(collection.features || [], metricConfig.key) : [0, 1]
+    const range = metricRanges[lensId]?.[metricConfig.key] || fallbackRange
+    mapInstance.setPaintProperty(FEATURE_FILL_ID, 'fill-color', buildFillColorExpression(metricConfig, range))
+  }, [collections, metricRanges])
+
+  const applyActiveMetricVisibility = useCallback((mapInstance, metricConfig) => {
+    if (!mapInstance?.getLayer(FEATURE_FILL_ID) || !mapInstance?.getLayer(FEATURE_OUTLINE_ID) || !mapInstance?.getLayer(FEATURE_LABEL_ID)) return
+    const filter = buildMetricVisibilityFilter(metricConfig.key)
+    mapInstance.setFilter(FEATURE_FILL_ID, filter)
+    mapInstance.setFilter(FEATURE_OUTLINE_ID, filter)
+    mapInstance.setFilter(FEATURE_LABEL_ID, filter)
+  }, [])
+
+  useEffect(() => {
+    if (!activeCollection || mapRef.current) return
+
+    const map = new mapboxgl.Map({
       container: mapEl.current,
       style: 'mapbox://styles/mapbox/dark-v11',
-      center: [18.63, -33.93],
-      zoom: 9.8,
-      pitch: 28,
-      bearing: -8,
-      attributionControl: false,
+      center: BASE_MAP_VIEW.center,
+      zoom: BASE_MAP_VIEW.zoom,
+      pitch: BASE_MAP_VIEW.pitch,
+      bearing: BASE_MAP_VIEW.bearing,
+      attributionControl: false
     })
 
-    mapRef.current.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right')
-    mapRef.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
+    mapRef.current = map
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
+    map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right')
 
-    mapRef.current.on('load', () => {
-      const m = mapRef.current
+    map.on('load', () => {
+      map.addSource(FEATURE_SOURCE_ID, {
+        type: 'geojson',
+        data: activeCollection,
+        promoteId: '__featureId'
+      })
 
-      m.addSource('wards', { type: 'geojson', data: geojson, promoteId: 'neighbourhood', generateId: false })
-
-      // Fill layer — colour driven by metric
-      m.addLayer({
-        id: 'wards-fill',
+      map.addLayer({
+        id: FEATURE_FILL_ID,
         type: 'fill',
-        source: 'wards',
+        source: FEATURE_SOURCE_ID,
         paint: {
-          'fill-color': '#1a8a5a',
-          'fill-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.92, 0.72],
+          'fill-color': activeMetric.high,
+          'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.92, ['boolean', ['feature-state', 'hover'], false], 0.84, 0.7]
         }
       })
 
-      // Outline
-      m.addLayer({
-        id: 'wards-outline',
+      map.addLayer({
+        id: FEATURE_OUTLINE_ID,
         type: 'line',
-        source: 'wards',
+        source: FEATURE_SOURCE_ID,
         paint: {
-          'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#ffffff', 'rgba(255,255,255,0.18)'],
-          'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.5, 0.6],
+          'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#ffffff', ['boolean', ['feature-state', 'hover'], false], 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0.18)'],
+          'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.2, ['boolean', ['feature-state', 'hover'], false], 1.2, 0.55]
         }
       })
 
-      // Neighbourhood label
-      m.addLayer({
-        id: 'wards-label',
+      map.addLayer({
+        id: FEATURE_LABEL_ID,
         type: 'symbol',
-        source: 'wards',
-        minzoom: 12,
+        source: FEATURE_SOURCE_ID,
+        minzoom: 10.8,
         layout: {
-          'text-field': ['get', 'neighbourhood'],
-          'text-size': 9,
+          'text-field': ['get', activeLens.nameKey],
+          'text-size': activeLensId === 'economy' ? 9 : 10,
           'text-max-width': 8,
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular']
         },
         paint: {
-          'text-color': 'rgba(255,255,255,0.55)',
-          'text-halo-color': 'rgba(0,0,0,0.5)',
-          'text-halo-width': 1,
+          'text-color': 'rgba(255,255,255,0.64)',
+          'text-halo-color': 'rgba(7, 9, 20, 0.82)',
+          'text-halo-width': 1
         }
       })
 
-      // Hover interaction
-      m.on('mousemove', 'wards-fill', e => {
-        if (!e.features.length) return
-        const id = e.features[0].properties.neighbourhood
-        if (id !== hoveredIdRef.current) {
-          if (hoveredIdRef.current) m.setFeatureState({ source: 'wards', id: hoveredIdRef.current }, { hover: false })
-          m.setFeatureState({ source: 'wards', id }, { hover: true })
-          hoveredIdRef.current = id
-          setHoveredWardId(id)
+      applyActiveMetricColor(map, activeLensId, activeMetric, activeCollection)
+      applyActiveMetricVisibility(map, activeMetric)
+
+      map.on('mousemove', FEATURE_FILL_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature) return
+        const featureId = feature.id ?? feature.properties?.__featureId
+        if (!featureId) return
+        if (hoveredFeatureIdRef.current && hoveredFeatureIdRef.current !== featureId) {
+          map.setFeatureState({ source: FEATURE_SOURCE_ID, id: hoveredFeatureIdRef.current }, { hover: false })
         }
-        setHoveredPos({ x: e.point.x, y: e.point.y })
-        m.getCanvas().style.cursor = 'pointer'
+        map.setFeatureState({ source: FEATURE_SOURCE_ID, id: featureId }, { hover: true })
+        hoveredFeatureIdRef.current = featureId
+        setHoveredFeatureId(featureId)
+        setHoveredPos({ x: event.point.x, y: event.point.y })
+        map.getCanvas().style.cursor = 'pointer'
       })
 
-      m.on('mouseleave', 'wards-fill', () => {
-        if (hoveredIdRef.current) m.setFeatureState({ source: 'wards', id: hoveredIdRef.current }, { hover: false })
-        hoveredIdRef.current = null
-        setHoveredWardId(null)
-        m.getCanvas().style.cursor = ''
+      map.on('mouseleave', FEATURE_FILL_ID, () => {
+        if (hoveredFeatureIdRef.current) {
+          map.setFeatureState({ source: FEATURE_SOURCE_ID, id: hoveredFeatureIdRef.current }, { hover: false })
+          hoveredFeatureIdRef.current = null
+        }
+        setHoveredFeatureId(null)
+        map.getCanvas().style.cursor = ''
       })
 
-      // Click interaction
-      m.on('click', 'wards-fill', e => {
-        if (!e.features.length) return
-        const feat = e.features[0]
-        const id = feat.properties.neighbourhood
-        // deselect previous
-        m.querySourceFeatures('wards').forEach(f => {
-          m.setFeatureState({ source: 'wards', id: f.properties.neighbourhood }, { selected: false })
-        })
-        m.setFeatureState({ source: 'wards', id }, { selected: true })
-        // get full enriched feature so we have computed props
-        const fullFeat = geojson.features.find(f => f.properties.neighbourhood === id) || feat
-        setSelectedWard(fullFeat.properties)
-        m.easeTo({ center: e.lngLat, duration: 400 })
+      map.on('click', FEATURE_FILL_ID, (event) => {
+        const feature = event.features?.[0]
+        if (!feature) return
+        const featureId = feature.id ?? feature.properties?.__featureId
+        if (!featureId) return
+        const fullFeature = activeCollectionRef.current?.features?.find((item) => String(item.id) === String(featureId))
+        setSelectedFeatureId(featureId)
+        setSelectedFeatureState(featureId)
+        fitFeatureOnMap(fullFeature)
       })
 
       setMapLoaded(true)
     })
 
-    return () => { mapRef.current?.remove(); mapRef.current = null }
-  }, [geojson]) // eslint-disable-line
+    return () => {
+      map.remove()
+      mapRef.current = null
+    }
+  }, [activeCollection, activeLens.nameKey, activeLensId, activeMetric, applyActiveMetricColor, applyActiveMetricVisibility, fitFeatureOnMap, setSelectedFeatureState])
 
-  // ── URL hash: read on mount ───────────────────────────────────────────────
   useEffect(() => {
-    const hash = new URLSearchParams(window.location.hash.slice(1))
-    const tabIdx = parseInt(hash.get('tab'))
-    const metricIdx = parseInt(hash.get('metric'))
-    const ward = hash.get('ward')
-    if (!isNaN(tabIdx) && tabIdx >= 0 && tabIdx < TABS.length) setActiveTab(tabIdx)
-    if (!isNaN(metricIdx) && metricIdx >= 0) setActiveMetricIdx(metricIdx)
-    if (ward) setPendingWard(ward)
-  }, []) // eslint-disable-line
+    if (!mapLoaded || !mapRef.current || !activeCollection) return
+    const map = mapRef.current
+    if (!map.isStyleLoaded() || !map.getLayer(FEATURE_FILL_ID) || !map.getLayer(FEATURE_LABEL_ID)) return
+    const source = map.getSource(FEATURE_SOURCE_ID)
+    if (!source) return
 
-  // ── URL hash: write when state changes ────────────────────────────────────
-  useEffect(() => {
-    const params = new URLSearchParams()
-    params.set('tab', activeTab)
-    params.set('metric', activeMetricIdx)
-    if (selectedWard) params.set('ward', selectedWard.neighbourhood)
-    window.history.replaceState(null, '', '#' + params.toString())
-  }, [activeTab, activeMetricIdx, selectedWard])
+    source.setData(activeCollection)
+    map.setLayoutProperty(FEATURE_LABEL_ID, 'text-field', ['get', activeLens.nameKey])
+    map.setLayoutProperty(FEATURE_LABEL_ID, 'visibility', activeLensId === 'economy' ? 'none' : 'visible')
+    applyActiveMetricColor(map, activeLensId, activeMetric, activeCollection)
+    applyActiveMetricVisibility(map, activeMetric)
+    map.easeTo({ ...BASE_MAP_VIEW, duration: 700 })
 
-  // ── Restore ward selection from URL hash after map loads ──────────────────
-  useEffect(() => {
-    if (!geojson || !mapLoaded || !pendingWard || !mapRef.current) return
-    const feat = geojson.features.find(f => f.properties.neighbourhood === pendingWard)
-    if (!feat) { setPendingWard(null); return }
-    setSelectedWard(feat.properties)
-    mapRef.current.setFeatureState({ source: 'wards', id: pendingWard }, { selected: true })
-    const ring = feat.geometry.type === 'Polygon'
-      ? feat.geometry.coordinates[0]
-      : feat.geometry.coordinates[0][0]
-    const lngs = ring.map(c => c[0])
-    const lats = ring.map(c => c[1])
-    mapRef.current.flyTo({
-      center: [(Math.min(...lngs) + Math.max(...lngs)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2],
-      zoom: 12,
-      duration: 1000,
-    })
-    setPendingWard(null)
-  }, [geojson, mapLoaded, pendingWard])
+    if (hoveredFeatureIdRef.current) {
+      hoveredFeatureIdRef.current = null
+      setHoveredFeatureId(null)
+    }
+    clearSelectedFeatureState()
+    setSelectedFeatureId(null)
+    setSearchQuery('')
+  }, [activeCollection, activeLens.nameKey, activeLensId, activeMetric, applyActiveMetricColor, applyActiveMetricVisibility, clearSelectedFeatureState, mapLoaded])
 
-  // ── Update fill colour when tab or metric changes ─────────────────────────
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return
-    const m = mapRef.current
-    if (!m.getLayer('wards-fill')) return
-    const [min, max] = metricRanges[metric.key] ?? [0, 1]
-    m.setPaintProperty('wards-fill', 'fill-color',
-      makeColorExpression(metric.key, min, max, metric.low, metric.high))
-  }, [mapLoaded, activeTab, activeMetricIdx, metric, metricRanges])
+    if (!mapRef.current.isStyleLoaded() || !mapRef.current.getLayer(FEATURE_FILL_ID) || !mapRef.current.getLayer(FEATURE_OUTLINE_ID) || !mapRef.current.getLayer(FEATURE_LABEL_ID)) return
+    applyActiveMetricColor(mapRef.current, activeLensId, activeMetric)
+    applyActiveMetricVisibility(mapRef.current, activeMetric)
+  }, [activeLensId, activeMetric, applyActiveMetricColor, applyActiveMetricVisibility, mapLoaded])
 
-  // Reset metric index when tab changes
-  const handleTabChange = useCallback(idx => {
-    setActiveTab(idx)
-    setActiveMetricIdx(0)
-  }, [])
+  useEffect(() => {
+    if (!collections[activeLensId] || !initialHashRef.current) return
+    const params = initialHashRef.current
+    const lens = params.get('lens')
+    const metric = params.get('metric')
+    const item = params.get('item')
+
+    if (lens && LENS_CONFIG[lens]) setActiveLensId(lens)
+    if (lens && metric && LENS_CONFIG[lens]?.metrics.some((entry) => entry.key === metric)) {
+      setMetricByLens((current) => ({ ...current, [lens]: metric }))
+    }
+
+    if (lens === activeLensId && item) {
+      setSelectedFeatureId(item)
+    }
+
+    initialHashRef.current = null
+  }, [activeLensId, collections])
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    params.set('lens', activeLensId)
+    params.set('metric', activeMetric.key)
+    if (selectedFeatureId) params.set('item', String(selectedFeatureId))
+    window.history.replaceState(null, '', `#${params.toString()}`)
+  }, [activeLensId, activeMetric.key, selectedFeatureId])
+
+  useEffect(() => {
+    if (!mapLoaded || !selectedFeature) return
+    setSelectedFeatureState(selectedFeature.id)
+  }, [mapLoaded, selectedFeature, setSelectedFeatureState])
+
+  const handleMetricChange = useCallback((metricKey) => {
+    setMetricByLens((current) => ({ ...current, [activeLensId]: metricKey }))
+  }, [activeLensId])
+
+  const handleSearchSelect = useCallback((feature) => {
+    setSearchQuery('')
+    setSearchOpen(false)
+    setSelectedFeatureId(feature.id)
+    setSelectedFeatureState(feature.id)
+    fitFeatureOnMap(feature)
+  }, [fitFeatureOnMap, setSelectedFeatureState])
 
   const handleShare = useCallback(() => {
     navigator.clipboard.writeText(window.location.href)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2200)
+    window.setTimeout(() => setCopied(false), 2000)
   }, [])
 
-  const handleSearchSelect = useCallback((feat) => {
-    const id = feat.properties.neighbourhood
-    setSearchQuery('')
-    setSearchOpen(false)
-    if (mapRef.current) {
-      mapRef.current.querySourceFeatures('wards').forEach(f => {
-        mapRef.current.setFeatureState({ source: 'wards', id: f.properties.neighbourhood }, { selected: false })
-      })
-      mapRef.current.setFeatureState({ source: 'wards', id }, { selected: true })
-      const ring = feat.geometry.type === 'Polygon'
-        ? feat.geometry.coordinates[0]
-        : feat.geometry.coordinates[0][0]
-      const lngs = ring.map(c => c[0])
-      const lats = ring.map(c => c[1])
-      mapRef.current.flyTo({
-        center: [(Math.min(...lngs) + Math.max(...lngs)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2],
-        zoom: 13,
-        duration: 800,
-      })
+  const renderNeighbourhoodStory = () => {
+    if (neighbourhoodStory === 'water') {
+      return (
+        <>
+          <div className="we-chart-card-head">
+            <div>
+              <div className="we-chart-card-kicker">Service Snapshot</div>
+              <h3>Water access by dwelling type</h3>
+            </div>
+            <StoryToggle
+              value={neighbourhoodStory}
+              onChange={setNeighbourhoodStory}
+              options={[
+                { value: 'water', label: 'Water' },
+                { value: 'hunger', label: 'Hunger' },
+                { value: 'materials', label: 'Housing' }
+              ]}
+            />
+          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={waterChartData} margin={{ top: 8, right: 6, left: 0, bottom: 8 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: 'rgba(236,243,255,0.6)', fontSize: 11 }} axisLine={false} tickLine={false} interval={0} angle={-10} textAnchor="end" height={54} />
+              <YAxis tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${value}%`} />
+              <Tooltip content={<CustomChartTooltip formatters={{ formal: (value) => `${DECIMAL_FORMATTER.format(value)}%`, informal: (value) => `${DECIMAL_FORMATTER.format(value)}%`, adi: (value) => `${DECIMAL_FORMATTER.format(value)}%`, city: (value) => `${DECIMAL_FORMATTER.format(value)}%` }} />} />
+              <Legend wrapperStyle={{ color: 'rgba(236,243,255,0.65)', fontSize: 11 }} />
+              <Bar dataKey="formal" name="Formal" fill="#4bd8ff" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="informal" name="Informal" fill="#ff8d63" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="adi" name="ADI" fill="#55e3a8" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="city" name="Cape Town" fill="#d5dcff" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )
     }
-    setSelectedWard(feat.properties)
-  }, [])
 
-  const closePanel = useCallback(() => {
-    setSelectedWard(null)
-    if (mapRef.current) {
-      mapRef.current.querySourceFeatures('wards').forEach(f => {
-        mapRef.current.setFeatureState({ source: 'wards', id: f.properties.neighbourhood }, { selected: false })
-      })
+    if (neighbourhoodStory === 'hunger') {
+      return (
+        <>
+          <div className="we-chart-card-head">
+            <div>
+              <div className="we-chart-card-kicker">Wellbeing Snapshot</div>
+              <h3>Adult hunger comparison</h3>
+            </div>
+            <StoryToggle
+              value={neighbourhoodStory}
+              onChange={setNeighbourhoodStory}
+              options={[
+                { value: 'water', label: 'Water' },
+                { value: 'hunger', label: 'Hunger' },
+                { value: 'materials', label: 'Housing' }
+              ]}
+            />
+          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={hungerChartData} margin={{ top: 8, right: 6, left: 0, bottom: 8 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: 'rgba(236,243,255,0.6)', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${value}%`} />
+              <Tooltip content={<CustomChartTooltip formatters={{ survey2024: (value) => `${DECIMAL_FORMATTER.format(value)}%`, ghs2023: (value) => `${DECIMAL_FORMATTER.format(value)}%` }} />} />
+              <Legend wrapperStyle={{ color: 'rgba(236,243,255,0.65)', fontSize: 11 }} />
+              <Bar dataKey="survey2024" name="2024 CCT Survey" fill="#62b8ff" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="ghs2023" name="2023 GHS" fill="#ff8d63" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )
     }
-  }, [])
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  if (!geojson) {
+    return (
+      <>
+        <div className="we-chart-card-head">
+          <div>
+            <div className="we-chart-card-kicker">Housing Snapshot</div>
+            <h3>Main building materials</h3>
+          </div>
+          <div className="we-chart-head-controls">
+            <StoryToggle
+              value={neighbourhoodStory}
+              onChange={setNeighbourhoodStory}
+              options={[
+                { value: 'water', label: 'Water' },
+                { value: 'hunger', label: 'Hunger' },
+                { value: 'materials', label: 'Housing' }
+              ]}
+            />
+            <StoryToggle
+              value={materialType}
+              onChange={setMaterialType}
+              options={[
+                { value: 'Wall', label: 'Walls' },
+                { value: 'Roof', label: 'Roof' }
+              ]}
+            />
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={materialChartData} layout="vertical" margin={{ top: 8, right: 10, left: 12, bottom: 0 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.07)" horizontal={false} />
+            <XAxis type="number" tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${DECIMAL_FORMATTER.format(value)}%`} />
+            <YAxis type="category" dataKey="name" width={110} tick={{ fill: 'rgba(236,243,255,0.65)', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <Tooltip content={<CustomChartTooltip formatters={{ share: (value) => `${DECIMAL_FORMATTER.format(value)}%` }} />} />
+            <Bar dataKey="share" name="Share of all dwellings" fill="#ffc864" radius={[0, 8, 8, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </>
+    )
+  }
+
+  const renderSuburbStory = () => {
+    if (suburbStory === 'cooking') {
+      return (
+        <>
+          <div className="we-chart-card-head">
+            <div>
+              <div className="we-chart-card-kicker">Suburb Profile</div>
+              <h3>{selectedCookingRow ? `${selectedCookingRow.Suburb} cooking fuel mix` : 'Cooking fuel mix'}</h3>
+            </div>
+            <StoryToggle
+              value={suburbStory}
+              onChange={setSuburbStory}
+              options={[
+                { value: 'cooking', label: 'Cooking' },
+                { value: 'electricity', label: 'Electricity' },
+                { value: 'refuse', label: 'Refuse' }
+              ]}
+            />
+          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={cookingChartData} margin={{ top: 8, right: 8, left: 0, bottom: 14 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: 'rgba(236,243,255,0.6)', fontSize: 11 }} axisLine={false} tickLine={false} interval={0} angle={-10} textAnchor="end" height={50} />
+              <YAxis tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${DECIMAL_FORMATTER.format(value)}%`} />
+              <Tooltip content={<CustomChartTooltip formatters={{ value: (value) => `${DECIMAL_FORMATTER.format(value)}%` }} />} />
+              <Bar dataKey="value" name="Households" fill="#63d8ff" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )
+    }
+
+    if (suburbStory === 'electricity') {
+      return (
+        <>
+          <div className="we-chart-card-head">
+            <div>
+              <div className="we-chart-card-kicker">City Snapshot</div>
+              <h3>Main electricity supply types</h3>
+            </div>
+            <StoryToggle
+              value={suburbStory}
+              onChange={setSuburbStory}
+              options={[
+                { value: 'cooking', label: 'Cooking' },
+                { value: 'electricity', label: 'Electricity' },
+                { value: 'refuse', label: 'Refuse' }
+              ]}
+            />
+          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={electricityChartData} margin={{ top: 8, right: 6, left: 0, bottom: 18 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: 'rgba(236,243,255,0.6)', fontSize: 11 }} axisLine={false} tickLine={false} interval={0} angle={-12} textAnchor="end" height={56} />
+              <YAxis tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${value}%`} />
+              <Tooltip content={<CustomChartTooltip formatters={{ cct: (value) => `${DECIMAL_FORMATTER.format(value)}%`, eskom: (value) => `${DECIMAL_FORMATTER.format(value)}%` }} />} />
+              <Legend wrapperStyle={{ color: 'rgba(236,243,255,0.65)', fontSize: 11 }} />
+              <Bar dataKey="cct" name="CCT supply" fill="#47e4a6" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="eskom" name="Eskom supply" fill="#ffb96c" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )
+    }
+
+    return (
+      <>
+        <div className="we-chart-card-head">
+          <div>
+            <div className="we-chart-card-kicker">Service Snapshot</div>
+            <h3>Refuse removal pathways</h3>
+          </div>
+          <StoryToggle
+            value={suburbStory}
+            onChange={setSuburbStory}
+            options={[
+              { value: 'cooking', label: 'Cooking' },
+              { value: 'electricity', label: 'Electricity' },
+              { value: 'refuse', label: 'Refuse' }
+            ]}
+          />
+        </div>
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={refuseChartData} margin={{ top: 8, right: 6, left: 0, bottom: 18 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+            <XAxis dataKey="name" tick={{ fill: 'rgba(236,243,255,0.58)', fontSize: 11 }} axisLine={false} tickLine={false} interval={0} angle={-10} textAnchor="end" height={62} />
+            <YAxis tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${value}%`} />
+            <Tooltip content={<CustomChartTooltip formatters={{ formal: (value) => `${DECIMAL_FORMATTER.format(value)}%`, informal: (value) => `${DECIMAL_FORMATTER.format(value)}%`, adi: (value) => `${DECIMAL_FORMATTER.format(value)}%`, total: (value) => `${DECIMAL_FORMATTER.format(value)}%` }} />} />
+            <Legend wrapperStyle={{ color: 'rgba(236,243,255,0.65)', fontSize: 11 }} />
+            <Bar dataKey="formal" name="Formal" fill="#63d8ff" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="informal" name="Informal" fill="#ff8d63" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="adi" name="ADI" fill="#47e4a6" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="total" name="Total" fill="#d6dcff" radius={[6, 6, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </>
+    )
+  }
+
+  const renderEconomyStory = () => {
+    if (economyStory === 'trend') {
+      return (
+        <>
+          <div className="we-chart-card-head">
+            <div>
+              <div className="we-chart-card-kicker">Trend Story</div>
+              <h3>{focusFeature ? `${focusFeature.properties.display_name} growth index` : 'Growth index'}</h3>
+            </div>
+            <StoryToggle
+              value={economyStory}
+              onChange={setEconomyStory}
+              options={[
+                { value: 'trend', label: 'Trend' },
+                { value: 'composition', label: 'Composition' },
+                { value: 'growth', label: 'Top Growth' }
+              ]}
+            />
+          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={economyTrendData} margin={{ top: 12, right: 18, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+              <XAxis dataKey="year" tick={{ fill: 'rgba(236,243,255,0.6)', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${DECIMAL_FORMATTER.format(value)}`} />
+              <Tooltip content={<CustomChartTooltip formatters={{ jobs: (value) => `${DECIMAL_FORMATTER.format(value)} index`, businesses: (value) => `${DECIMAL_FORMATTER.format(value)} index`, income: (value) => `${DECIMAL_FORMATTER.format(value)} index` }} />} />
+              <Legend wrapperStyle={{ color: 'rgba(236,243,255,0.65)', fontSize: 11 }} />
+              <Line type="monotone" dataKey="jobs" name="Jobs" stroke="#63d8ff" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="businesses" name="Businesses" stroke="#ffc864" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="income" name="Income" stroke="#d391ff" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </>
+      )
+    }
+
+    if (economyStory === 'composition') {
+      return (
+        <>
+          <div className="we-chart-card-head">
+            <div>
+              <div className="we-chart-card-kicker">Workforce Mix</div>
+              <h3>{focusFeature ? `${focusFeature.properties.display_name} workforce profile` : 'Workforce profile'}</h3>
+            </div>
+            <StoryToggle
+              value={economyStory}
+              onChange={setEconomyStory}
+              options={[
+                { value: 'trend', label: 'Trend' },
+                { value: 'composition', label: 'Composition' },
+                { value: 'growth', label: 'Top Growth' }
+              ]}
+            />
+          </div>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={economyCompositionData} margin={{ top: 8, right: 8, left: 0, bottom: 18 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: 'rgba(236,243,255,0.6)', fontSize: 11 }} axisLine={false} tickLine={false} interval={0} angle={-10} textAnchor="end" height={52} />
+              <YAxis tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${DECIMAL_FORMATTER.format(value)}%`} />
+              <Tooltip content={<CustomChartTooltip formatters={{ value: (value) => `${DECIMAL_FORMATTER.format(value)}%` }} />} />
+              <Bar dataKey="value" name="Share" fill="#47e4a6" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )
+    }
+
+    return (
+      <>
+        <div className="we-chart-card-head">
+          <div>
+            <div className="we-chart-card-kicker">Growth Leaders</div>
+            <h3>Top employment growth hexagons</h3>
+          </div>
+          <StoryToggle
+            value={economyStory}
+            onChange={setEconomyStory}
+            options={[
+              { value: 'trend', label: 'Trend' },
+              { value: 'composition', label: 'Composition' },
+              { value: 'growth', label: 'Top Growth' }
+            ]}
+          />
+        </div>
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={economyGrowthChartData} layout="vertical" margin={{ top: 8, right: 10, left: 12, bottom: 0 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.07)" horizontal={false} />
+            <XAxis type="number" tick={{ fill: 'rgba(236,243,255,0.55)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(value) => `${DECIMAL_FORMATTER.format(value)}%`} />
+            <YAxis type="category" dataKey="name" width={104} tick={{ fill: 'rgba(236,243,255,0.65)', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <Tooltip content={<CustomChartTooltip formatters={{ growth: (value) => `${DECIMAL_FORMATTER.format(value)}%` }} />} />
+            <Bar dataKey="growth" name="Employment growth" fill="#ff8c68" radius={[0, 8, 8, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </>
+    )
+  }
+
+  const renderStoryCard = () => {
+    if (activeLensId === 'neighbourhoods') return renderNeighbourhoodStory()
+    if (activeLensId === 'suburbs') return renderSuburbStory()
+    return renderEconomyStory()
+  }
+
+  if (!activeCollection) {
     return (
       <div className="we-root">
-        <div ref={mapEl} className="we-map" style={{ opacity: 0 }} />
+        <div className="we-map" ref={mapEl} style={{ opacity: 0 }} />
         <div className="we-loading">
           <div className="we-loading-spinner" />
-          <p>Loading neighbourhood data…</p>
+          <p>Loading CPT atlas...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="we-root">
-      {/* MAP */}
-      <div ref={mapEl} className="we-map" />
+    <div className={`we-root ${isAnalyticsCollapsed ? 'we-root--analytics-collapsed' : 'we-root--analytics-open'}`}>
+      <div className="we-atmosphere we-atmosphere--one" />
+      <div className="we-atmosphere we-atmosphere--two" />
+      <div className="we-atmosphere we-atmosphere--three" />
+      <div className="we-map" ref={mapEl} />
 
-      {/* ── HEADER ── */}
-      <div className="we-header">
+      <header className="we-header">
         <div className="we-brand">
           <div className="we-brand-mark" />
           <div>
             <h1 className="we-brand-title">Mission Urban Lab</h1>
-            <p className="we-brand-sub">Neighbourhood-level analysis across {cityStats.count} areas</p>
+            <p className="we-brand-sub">Cape Town atlas for neighbourhood, suburb and economic insight</p>
           </div>
         </div>
 
-        {/* Search */}
         <div className="we-search">
           <input
-            type="text"
             className="we-search-input"
-            placeholder="Search neighbourhoods…"
+            type="text"
+            placeholder={activeLens.searchPlaceholder}
             value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true) }}
+            onChange={(event) => {
+              setSearchQuery(event.target.value)
+              setSearchOpen(true)
+            }}
             onFocus={() => setSearchOpen(true)}
-            onBlur={() => setTimeout(() => setSearchOpen(false), 180)}
+            onBlur={() => window.setTimeout(() => setSearchOpen(false), 180)}
           />
-          {searchOpen && searchResults.length > 0 && (
+          {searchOpen && searchResults.length > 0 ? (
             <div className="we-search-dropdown">
-              {searchResults.map(feat => (
+              {searchResults.map((feature) => (
                 <button
-                  key={feat.properties.neighbourhood}
+                  key={feature.id}
                   className="we-search-result"
-                  onMouseDown={() => handleSearchSelect(feat)}
+                  onMouseDown={() => handleSearchSelect(feature)}
                 >
-                  <span className="we-search-name">{feat.properties.neighbourhood}</span>
-                  <span className="we-search-ward">Ward #{feat.properties.WardID}</span>
+                  <span className="we-search-name">{feature.properties?.display_name}</span>
+                  <span className="we-search-meta">{activeLens.badge}</span>
                 </button>
               ))}
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="we-header-actions">
           <button className={`we-share-btn ${copied ? 'we-share-btn--copied' : ''}`} onClick={handleShare}>
-            {copied ? '✓ Copied' : '⤴ Share'}
+            {copied ? 'Copied' : 'Share View'}
           </button>
           <button className="we-enter-btn" onClick={onEnterDashboard}>
             Enter Dashboard
             <span className="we-enter-arrow">→</span>
           </button>
         </div>
+      </header>
+
+      <div className={`we-hero-card ${isHeroCollapsed ? 'we-hero-card--collapsed' : ''}`}>
+        <div className="we-panel-utility">
+          <div className="we-hero-kicker">{activeLens.badge}</div>
+          <button className="we-panel-toggle" onClick={() => setIsHeroCollapsed((current) => !current)}>
+            {isHeroCollapsed ? 'Show overview' : 'Hide overview'}
+          </button>
+        </div>
+        {!isHeroCollapsed ? (
+          <>
+            <h2 className="we-hero-title">{activeLens.title}</h2>
+            <p className="we-hero-desc">{activeLens.subtitle}</p>
+            <div className="we-overview-grid">
+              {cityOverviewStats.map((stat) => (
+                <OverviewStat key={stat.label} label={stat.label} value={stat.value} hint={stat.hint} />
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="we-collapsed-note">Overview hidden so the map has more space.</p>
+        )}
       </div>
 
-      {/* ── HERO ── */}
-      {cityStats && (
-        <div className="we-hero">
-          <div className="we-hero-eyebrow">Cape Town Metro · {cityStats.count} Neighbourhoods</div>
-          <h2 className="we-hero-title">Urban<br/>Analytics</h2>
-          <p className="we-hero-desc">Geospatial intelligence for Mission Inner City</p>
-        </div>
-      )}
-
-      {/* ── TAB BAR ── */}
-      <div className="we-tabbar">
-        {TABS.map((t, i) => (
+      <div className="we-lens-switcher">
+        {Object.values(LENS_CONFIG).map((lens) => (
           <button
-            key={t.id}
-            className={`we-tab ${i === activeTab ? 'we-tab--active' : ''}`}
-            onClick={() => handleTabChange(i)}
+            key={lens.id}
+            className={`we-lens-btn ${activeLensId === lens.id ? 'we-lens-btn--active' : ''}`}
+            onClick={() => setActiveLensId(lens.id)}
           >
-            <span className="we-tab-label">{t.label}</span>
+            <span className="we-lens-btn-label">{lens.label}</span>
+            <span className="we-lens-btn-sub">{lens.badge}</span>
           </button>
         ))}
       </div>
 
-      {/* ── LEFT PANEL ── */}
-      <div className="we-panel">
-        <div className="we-panel-section">
-          <p className="we-panel-desc">{tab.description}</p>
-          <div className="we-metric-pills">
-            {tab.metrics.map((m, i) => (
-              <button
-                key={m.key}
-                className={`we-metric-pill ${i === activeMetricIdx ? 'we-metric-pill--active' : ''}`}
-                style={i === activeMetricIdx ? { background: `rgba(${metric.high.join(',')},0.22)`, borderColor: `rgba(${metric.high.join(',')},0.7)`, color: rgbToHex(metric.high) } : {}}
-                onClick={() => setActiveMetricIdx(i)}
-              >
-                {m.label}
-              </button>
-            ))}
+      <aside className={`we-left-panel ${isThemePanelCollapsed ? 'we-left-panel--collapsed' : ''}`}>
+        <div className="we-panel-header">
+          <div className="we-panel-utility">
+            <div className="we-panel-kicker">Map Theme</div>
+            <button className="we-panel-toggle" onClick={() => setIsThemePanelCollapsed((current) => !current)}>
+              {isThemePanelCollapsed ? 'Show themes' : 'Hide themes'}
+            </button>
           </div>
+          <h3>{activeMetric.label}</h3>
+          <p>{activeMetric.description}</p>
         </div>
+        {!isThemePanelCollapsed ? (
+          <>
+            <div className="we-metric-grid">
+              {activeLens.metrics.map((metric) => (
+                <button
+                  key={metric.key}
+                  className={`we-metric-pill ${activeMetric.key === metric.key ? 'we-metric-pill--active' : ''}`}
+                  onClick={() => handleMetricChange(metric.key)}
+                  style={activeMetric.key === metric.key ? { borderColor: metric.high, color: metric.high, boxShadow: `0 0 0 1px ${metric.high} inset` } : undefined}
+                >
+                  <span className="we-metric-pill-title">{metric.label}</span>
+                  <span className="we-metric-pill-desc">{metric.description}</span>
+                </button>
+              ))}
+            </div>
+            <div className="we-legend">
+              <div
+                className="we-legend-bar"
+                style={{ background: `linear-gradient(90deg, ${activeMetric.low}, ${mixHexColors(activeMetric.low, activeMetric.high, 0.5)}, ${activeMetric.high})` }}
+              />
+              <div className="we-legend-labels">
+                <span>Lower</span>
+                <strong>{activeMetric.label}</strong>
+                <span>Higher</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="we-collapsed-note">Theme picker hidden while you inspect map results.</div>
+        )}
+      </aside>
 
-        {/* Colour legend */}
-        <div className="we-legend">
-          <div className="we-legend-bar" style={{
-            background: `linear-gradient(to right, ${rgbToHex(metric.low)}, ${rgbToHex(metric.high)})`
-          }} />
-          <div className="we-legend-labels">
-            <span>Low</span>
-            <span style={{ color: rgbToHex(metric.high) }}>{metric.label}</span>
-            <span>High</span>
-          </div>
-        </div>
-
-        <div className="we-panel-hint">
-          {selectedWard ? null : <span>Click a neighbourhood to explore data ↗</span>}
-        </div>
-      </div>
-
-      {/* ── HOVER TOOLTIP ── */}
-      {hoveredWardProps && !selectedWard && (
+      {hoveredFeature && !selectedFeature ? (
         <div
           className="we-tooltip"
-          style={{ left: Math.min(hoveredPos.x + 16, window.innerWidth - 200), top: Math.max(hoveredPos.y - 48, 60) }}
+          style={{
+            left: Math.min(hoveredPos.x + 18, window.innerWidth - 240),
+            top: Math.max(hoveredPos.y - 36, 72)
+          }}
         >
-          <div className="we-tooltip-name">{hoveredWardProps.neighbourhood}</div>
-          {hoveredWardProps[metric.key] != null && (
-            <div className="we-tooltip-metric">
-              <span className="we-tooltip-label">{metric.label}</span>
-              <span className="we-tooltip-value">
-                {typeof hoveredWardProps[metric.key] === 'number'
-                  ? hoveredWardProps[metric.key] > 100
-                    ? Math.round(hoveredWardProps[metric.key]).toLocaleString()
-                    : hoveredWardProps[metric.key].toFixed(2)
-                  : hoveredWardProps[metric.key]}
-              </span>
-            </div>
-          )}
-          <div className="we-tooltip-hint">Click to explore ↗</div>
-        </div>
-      )}
-
-      {/* ── WARD DETAIL PANEL ── */}
-      {selectedWard && (
-        <div className="we-detail">
-          <div className="we-detail-header">
-            <div>
-              <div className="we-detail-badge">Neighbourhood</div>
-              <h2 className="we-detail-ward">{selectedWard.neighbourhood}</h2>
-              <div className="we-detail-sub">Ward #{selectedWard.WardID}</div>
-            </div>
-            <button className="we-detail-close" onClick={closePanel}>✕</button>
+          <div className="we-tooltip-title">{hoveredFeature.properties?.display_name}</div>
+          <div className="we-tooltip-row">
+            <span>{activeMetric.label}</span>
+            <strong>{formatMetricValue(activeMetric.format, Number(hoveredFeature.properties?.[activeMetric.key]))}</strong>
           </div>
+          <div className="we-tooltip-hint">Click to pin this area</div>
+        </div>
+      ) : null}
 
-          <div className="we-detail-stats">
-            {tab.statFields.map(sf => {
-              const val = selectedWard[sf.key]
-              if (val == null) return null
-              if (sf.skipZero && val === 0) return null
-              const avg = cityAverages[sf.key]
-              const pctDiff = avg && avg > 0 ? ((val - avg) / avg) * 100 : null
-              return (
-                <div key={sf.key} className="we-stat-row">
-                  <span className="we-stat-label">{sf.label}</span>
-                  <div className="we-stat-right">
-                    <span className="we-stat-value">{sf.fmt(val)}</span>
-                    {pctDiff != null && Math.abs(pctDiff) >= 2 && (
-                      <span className={`we-stat-delta ${pctDiff > 0 ? 'we-stat-delta--above' : 'we-stat-delta--below'}`}>
-                        {pctDiff > 0 ? '▲' : '▼'}{Math.abs(pctDiff).toFixed(0)}%
-                      </span>
-                    )}
-                  </div>
+      <aside className={`we-detail-panel ${isDetailMinimized ? 'we-detail-panel--minimized' : ''}`}>
+        <div className="we-detail-head">
+          <div>
+            <div className="we-detail-kicker">{activeLens.badge}</div>
+            <h3>{focusFeature?.properties?.display_name || 'Select an area'}</h3>
+            <p>{focusFeature ? 'Pinned view with friendly labels and citywide comparison.' : 'Click on the map to inspect an area in more detail.'}</p>
+          </div>
+          <div className="we-detail-actions">
+            <button className="we-panel-toggle" onClick={() => setIsDetailMinimized((current) => !current)}>
+              {isDetailMinimized ? 'Expand stats' : 'Minimise'}
+            </button>
+            {selectedFeature ? (
+              <button
+                className="we-detail-close"
+                onClick={() => {
+                  clearSelectedFeatureState()
+                  setSelectedFeatureId(null)
+                  setIsDetailMinimized(false)
+                  setIsThemePanelCollapsed(false)
+                }}
+              >
+                Close
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {!isDetailMinimized ? (
+          <>
+            <div className="we-detail-main-metric">
+              <span>Main metric</span>
+              <strong>{focusFeature ? formatMetricValue(activeMetric.format, Number(focusFeature.properties?.[activeMetric.key])) : 'No data'}</strong>
+              <small>{activeMetric.label}</small>
+            </div>
+            <div className="we-detail-rows">
+              {focusFeature ? activeLens.detailStats.map((stat) => {
+                const rawValue = Number(focusFeature.properties?.[stat.key])
+                if (!Number.isFinite(rawValue)) return null
+                const average = averageLookup[stat.key]
+                const deltaPercent = Number.isFinite(average) && average !== 0 ? ((rawValue - average) / average) * 100 : null
+                const delta = deltaPercent !== null && Math.abs(deltaPercent) >= 2
+                  ? {
+                      label: `${deltaPercent > 0 ? '+' : ''}${DECIMAL_FORMATTER.format(deltaPercent)} vs city`,
+                      positive: deltaPercent > 0
+                    }
+                  : null
+                return (
+                  <DetailRow
+                    key={stat.key}
+                    label={stat.label}
+                    value={formatMetricValue(stat.format, rawValue)}
+                    delta={delta}
+                  />
+                )
+              }) : null}
+            </div>
+          </>
+        ) : (
+          <div className="we-collapsed-note">Detailed stats are minimised. Expand them when you want the full breakdown.</div>
+        )}
+      </aside>
+
+      <section className={`we-analytics-rail ${isAnalyticsCollapsed ? 'we-analytics-rail--collapsed' : ''}`}>
+        <div className="we-analytics-rail-head">
+          <div>
+            <div className="we-chart-card-kicker">Charts And Stats</div>
+            <h3>{isAnalyticsCollapsed ? 'Bottom analytics hidden for a clearer map view' : 'Bottom analytics open'}</h3>
+          </div>
+          <button className="we-panel-toggle" onClick={() => setIsAnalyticsCollapsed((current) => !current)}>
+            {isAnalyticsCollapsed ? 'Show charts' : 'Hide charts'}
+          </button>
+        </div>
+
+        {!isAnalyticsCollapsed ? (
+          <div className="we-analytics-rail-body">
+            <article className="we-chart-card">
+              <div className="we-chart-card-head">
+                <div>
+                  <div className="we-chart-card-kicker">Map Ranking</div>
+                  <h3>Top places for {activeMetric.label.toLowerCase()}</h3>
                 </div>
-              )
-            })}
-            <div className="we-detail-avg-note">vs city average</div>
+                <div className="we-chart-card-note">Based on the active map layer</div>
+              </div>
+              <RankingChart data={rankingChartData} metric={activeMetric} />
+            </article>
+
+            <article className="we-chart-card">
+              {renderStoryCard()}
+            </article>
+
+            <article className="we-chart-card we-chart-card--spotlight">
+              <div className="we-chart-card-head">
+                <div>
+                  <div className="we-chart-card-kicker">Spotlight</div>
+                  <h3>{focusFeature?.properties?.display_name || 'Area spotlight'}</h3>
+                </div>
+              </div>
+              <p className="we-spotlight-copy">
+                {focusFeature
+                  ? `This card keeps the selected area in focus while you flip through the map themes and bottom charts.`
+                  : 'Pick any area on the map and the spotlight card will update with its most useful summary values.'}
+              </p>
+              <div className="we-spotlight-grid">
+                {spotlightStats.map((stat) => (
+                  <div key={stat.label} className="we-spotlight-stat">
+                    <span>{stat.label}</span>
+                    <strong>{stat.value}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="we-spotlight-note">
+                Labels are translated into plain English so the landing page stays easy to scan.
+              </div>
+            </article>
           </div>
-        </div>
-      )}
-
-      {/* ── CITY STATS BAR ── */}
-      {cityStats && (
-        <div className="we-statsbar">
-          <StatChip label="Neighbourhoods" value={cityStats.count} />
-          <StatChip label="Population"     value={cityStats.pop.toLocaleString()} />
-          <StatChip label="Total Area"     value={`${Number(cityStats.areaSqkm).toLocaleString()} km²`} />
-          <StatChip label="Streetlights"   value={cityStats.lights.toLocaleString()} />
-          <StatChip label="Park Area"      value={`${cityStats.parksSqkm} km²`} />
-          <StatChip label="Avg. Income"    value={`R ${cityStats.avgIncome.toLocaleString()}`} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-function StatChip({ label, value }) {
-  return (
-    <div className="we-stat-chip">
-      <div>
-        <div className="we-stat-chip-value">{value}</div>
-        <div className="we-stat-chip-label">{label}</div>
-      </div>
+        ) : null}
+      </section>
     </div>
   )
 }

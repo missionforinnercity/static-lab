@@ -6,15 +6,17 @@ import { latLngToCell, cellToBoundary } from 'h3-js'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { isBusinessOpen } from '../../utils/timeUtils'
 import { colorScales } from '../../utils/dataLoader'
+import { MAPBOX_TOKEN } from '../../utils/mapboxToken'
 import './ExplorerMap.css'
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || ''
-const ECOLOGY_HEAT_PEDESTAL_MIN_M = 0.8
-const ECOLOGY_HEAT_PEDESTAL_MAX_M = 1.9
+const ECOLOGY_HEAT_PEDESTAL_MIN_M = 1.4
+const ECOLOGY_HEAT_PEDESTAL_MAX_M = 3.6
 const ECOLOGY_BUILDING_LIFT_M = 2.2
 const ECOLOGY_SELECTION_LARGE_AREA_M2 = 6000
 const ECOLOGY_SELECTION_TARGET_AREA_M2 = 2500
 const ECOLOGY_SELECTION_MAX_SEGMENTS = 25
+const ECOLOGY_EXTREME_HEAT_SCORE = 75
+const ECOLOGY_EXTREME_COOL_ISLAND_SCORE = 50
 
 const toEcologyFeatureKey = (value) => {
   if (value === null || value === undefined || value === '') return null
@@ -156,15 +158,13 @@ const buildEcologySelectionFeature = (feature, selectionKey) => {
 
 const ECOLOGY_METRIC_CONFIG = {
   urban_heat_score: {
-    label: 'Urban Heat Score',
-    description: 'Heat priority',
+    label: 'Heat Islands',
+    description: 'Only the hottest island hotspots',
     property: 'urban_heat_score',
     colorStops: [
-      [0, '#fff7ed'],
-      [20, '#fed7aa'],
-      [40, '#fdba74'],
-      [60, '#f97316'],
-      [80, '#dc2626'],
+      [75, '#fdba74'],
+      [82, '#f97316'],
+      [90, '#dc2626'],
       [100, '#7f1d1d']
     ]
   },
@@ -181,15 +181,13 @@ const ECOLOGY_METRIC_CONFIG = {
     ]
   },
   cool_island_score: {
-    label: 'Cool Island Score',
-    description: 'Cooling refuge',
+    label: 'Cool Islands',
+    description: 'Only the strongest cooling refuges',
     property: 'cool_island_score',
     colorStops: [
-      [0, '#fff7ed'],
-      [20, '#dbeafe'],
-      [40, '#7dd3fc'],
-      [60, '#22d3ee'],
-      [80, '#14b8a6'],
+      [50, '#7dd3fc'],
+      [65, '#22d3ee'],
+      [90, '#14b8a6'],
       [100, '#0f766e']
     ]
   },
@@ -230,6 +228,22 @@ const buildEcologyInterpolatedExpression = (property, stops) => {
     expr.push(value)
   })
   return expr
+}
+
+const buildEcologyMetricFilter = (metricId) => {
+  if (metricId === 'urban_heat_score') {
+    return ['>=', ['coalesce', ['get', 'urban_heat_score'], -999], ECOLOGY_EXTREME_HEAT_SCORE]
+  }
+
+  if (metricId === 'cool_island_score') {
+    return ['>=', ['coalesce', ['get', 'cool_island_score'], -999], ECOLOGY_EXTREME_COOL_ISLAND_SCORE]
+  }
+
+  return [
+    'all',
+    ['!=', ['coalesce', ['get', ECOLOGY_METRIC_CONFIG[metricId]?.property || metricId], null], null],
+    ['>', ['coalesce', ['get', ECOLOGY_METRIC_CONFIG[metricId]?.property || metricId], 0], 0]
+  ]
 }
 
 const ExplorerMap = ({
@@ -412,10 +426,11 @@ const ExplorerMap = ({
   const ecologyMetricPaint = useMemo(() => {
     return buildEcologyInterpolatedExpression(ecologyMetricConfig.property, ecologyMetricConfig.colorStops)
   }, [ecologyMetricConfig])
+  const ecologyMetricFilter = useMemo(() => buildEcologyMetricFilter(ecologyMetric), [ecologyMetric])
   const ecologyHeatVolumeHeight = useMemo(() => {
     const heightStops = ecologyMetricConfig.colorStops.map(([stop], index, stops) => {
       const progress = stops.length > 1 ? index / (stops.length - 1) : 1
-      const easedProgress = Math.pow(progress, 1.15)
+      const easedProgress = Math.pow(progress, 0.8)
       const height = ECOLOGY_HEAT_PEDESTAL_MIN_M + (ECOLOGY_HEAT_PEDESTAL_MAX_M - ECOLOGY_HEAT_PEDESTAL_MIN_M) * easedProgress
       return [stop, Number(height.toFixed(2))]
     })
@@ -1959,26 +1974,29 @@ const ExplorerMap = ({
                 <Layer
                   id="ecology-heat-fill"
                   type="fill"
+                  filter={ecologyMetricFilter}
                   paint={{
                     'fill-color': ecologyMetricPaint,
-                    'fill-opacity': 0.16
+                    'fill-opacity': 0.12
                   }}
                 />
                 <Layer
                   id="ecology-heat-volume"
                   type="fill-extrusion"
                   minzoom={13}
+                  filter={ecologyMetricFilter}
                   paint={{
                     'fill-extrusion-color': ecologyMetricPaint,
                     'fill-extrusion-height': ecologyHeatVolumeHeight,
-                    'fill-extrusion-base': 0,
-                    'fill-extrusion-opacity': 1,
+                    'fill-extrusion-base': 0.45,
+                    'fill-extrusion-opacity': 0.97,
                     'fill-extrusion-vertical-gradient': true
                   }}
                 />
                 <Layer
                   id="ecology-heat-hit"
                   type="fill"
+                  filter={ecologyMetricFilter}
                   paint={{
                     'fill-color': '#ffffff',
                     'fill-opacity': 0.01

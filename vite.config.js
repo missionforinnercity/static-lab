@@ -15,6 +15,18 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('mapbox-gl') || id.includes('react-map-gl')) return 'maps'
+            if (id.includes('recharts')) return 'charts'
+            if (id.includes('jspdf') || id.includes('html2canvas')) return 'reporting'
+            if (id.includes('react') || id.includes('react-dom')) return 'react-vendor'
+          }
+        }
+      }
+    }
   }
 })

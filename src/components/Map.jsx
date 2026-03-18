@@ -25,10 +25,10 @@ import {
   thermalColorExpression,
   safetyColorExpression,
 } from '../utils/walkabilityEngine'
+import { MAPBOX_TOKEN } from '../utils/mapboxToken'
 import './Map.css'
 
-// Replace with your Mapbox token
-mapboxgl.accessToken = 'pk.eyJ1IjoiYW5lZXNvbWFyIiwiYSI6ImNtN3lnYXhveTA5NmsyanM2Z2NmaHhrcncifQ.xIzrc87ZIEJZE1vpB2gFfw'
+mapboxgl.accessToken = MAPBOX_TOKEN
 
 const Map = ({ mode, activeLayers, temporalState, explorerFilters, selectedTour, districtGeoJSON, selectedDistrictId, districtBounds, onDistrictClick, compareDistricts, showDistricts, walkabilityData: walkabilityIndexData, onSegmentClick, compareSegments, focusedSegment }) => {
   const mapContainer = useRef(null)

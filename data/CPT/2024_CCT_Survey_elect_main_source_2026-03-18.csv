@@ -1,0 +1,31 @@
+"elect_main_supply","SUPPLY_AUT","Dataset","Formal_dwelling","Informal_dwelling","ADI","Cape Town"
+"In-house prepaid meter","CCT","2024 CCT Survey",79.2463,56.1567,59.5994,74.2823
+"In-house prepaid meter","Eskom","2024 CCT Survey",81.6269,36.664,58.3917,65.2515
+"In-house conventional meter (municipal electricity that is paid with rates or a bill)","Eskom","2024 CCT Survey",17.0788,3.4925,11.5104,12.2756
+"In-house conventional meter (municipal electricity that is paid with rates or a bill)","CCT","2024 CCT Survey",19.9761,4.853,7.2744,16.605
+"Connection from elsewhere (including direct to overhead cables)","Eskom","2024 CCT Survey",0.0685,16.2995,0.2942,4.5282
+"Connection from elsewhere (including direct to overhead cables)","CCT","2024 CCT Survey",0.0427,9.6827,0.1129,1.1651
+"Connection from the main house (only for backyard dwellers)","Eskom","2024 CCT Survey",0.0072,1.0105,26.0871,5.1033
+"Connection from the main house (only for backyard dwellers)","CCT","2024 CCT Survey",0.1407,2.939,26.8122,3.7013
+"Connection from neighbours house","Eskom","2024 CCT Survey",0.3765,9.3869,0.8311,2.9302
+"Connection from neighbours house","CCT","2024 CCT Survey",0.0593,6.0034,3.0959,1.1135
+"Car battery","CCT","2024 CCT Survey",0.0066,0,0,0.005
+"Car battery","Eskom","2024 CCT Survey",0.0069,0,0,0.0037
+"Home solar panels","Eskom","2024 CCT Survey",0.0939,1.0169,0,0.324
+"Home solar panels","CCT","2024 CCT Survey",0.1765,0.1116,0.1,0.1589
+"Generator","CCT","2024 CCT Survey",0,0.0605,0,0.007
+"Generator","Eskom","2024 CCT Survey",0.0014,0,0,8e-04
+"Other","Eskom","2024 CCT Survey",0.1904,0.7541,1.2028,0.5274
+"Other","CCT","2024 CCT Survey",0.2207,1.2076,1.3305,0.4684
+"None","Eskom","2024 CCT Survey",0.5493,31.3756,1.6828,9.0552
+"None","CCT","2024 CCT Survey",0.1312,18.9855,1.6747,2.4934
+"In-house prepaid meter","All Suppliers","2024 CCT Survey",53.608,7.8207,8.6462,70.7146
+"In-house conventional meter (municipal electricity that is paid with rates or a bill)","All Suppliers","2024 CCT Survey",12.7754,0.7103,1.3758,14.8947
+"Connection from elsewhere (including direct to overhead cables)","All Suppliers","2024 CCT Survey",0.0341,2.4101,0.0298,2.4937
+"Connection from the main house (only for backyard dwellers)","All Suppliers","2024 CCT Survey",0.0661,0.3126,3.8764,4.2552
+"Connection from neighbours house","All Suppliers","2024 CCT Survey",0.1066,1.4178,0.2882,1.8312
+"Car battery","All Suppliers","2024 CCT Survey",0.0045,0,0,0.0045
+"Home solar panels","All Suppliers","2024 CCT Survey",0.1008,0.116,0.0073,0.2242
+"Generator","All Suppliers","2024 CCT Survey",3e-04,0.0042,0,0.0045
+"Other","All Suppliers","2024 CCT Survey",0.1415,0.1645,0.1856,0.4917
+"None","All Suppliers","2024 CCT Survey",0.1761,4.6636,0.246,5.0857

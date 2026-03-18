@@ -69,9 +69,9 @@ const rankMetric = (features, targetFeature, key, direction = 'desc') => {
 }
 
 const metricMeta = {
-  urban_heat_score: { label: 'Urban Heat', color: '#f97316' },
+  urban_heat_score: { label: 'Heat Islands', color: '#f97316' },
   thermal_percentile: { label: 'Thermal Percentile', color: '#ef4444' },
-  cool_island_score: { label: 'Cool Island', color: '#67e8f9' },
+  cool_island_score: { label: 'Cool Islands', color: '#67e8f9' },
   health_score: { label: 'Health Score', color: '#86efac' }
 }
 
@@ -155,9 +155,9 @@ const EcologyHeatDetailPanel = ({
   }, [currentYearData, currentPrimary, currentCompare])
 
   const currentSnapshot = useMemo(() => ([
-    { metric: 'Urban Heat', primary: currentPrimary?.urban_heat_score ?? 0, compare: currentCompare?.urban_heat_score ?? 0 },
+    { metric: 'Heat Islands', primary: currentPrimary?.urban_heat_score ?? 0, compare: currentCompare?.urban_heat_score ?? 0 },
     { metric: 'Thermal %', primary: currentPrimary?.thermal_percentile ?? 0, compare: currentCompare?.thermal_percentile ?? 0 },
-    { metric: 'Cool Island', primary: currentPrimary?.cool_island_score ?? 0, compare: currentCompare?.cool_island_score ?? 0 },
+    { metric: 'Cool Islands', primary: currentPrimary?.cool_island_score ?? 0, compare: currentCompare?.cool_island_score ?? 0 },
     { metric: 'Health', primary: currentPrimary?.health_score ?? 0, compare: currentCompare?.health_score ?? 0 }
   ]), [currentPrimary, currentCompare])
 
@@ -226,7 +226,7 @@ const EcologyHeatDetailPanel = ({
 
           <div className="env-detail-summary-row ecology-summary-row">
             <div className="env-detail-stat">
-              <span className="env-detail-stat-label">Urban Heat Rank</span>
+              <span className="env-detail-stat-label">Heat Island Rank</span>
               <strong>{rankSummary?.primary?.urbanHeat ? `${rankSummary.primary.urbanHeat.rank} / ${rankSummary.primary.urbanHeat.total}` : '—'}</strong>
             </div>
             <div className="env-detail-stat">
@@ -234,7 +234,7 @@ const EcologyHeatDetailPanel = ({
               <strong>{rankSummary?.primary?.thermal ? `Hotter than ${formatValue(rankSummary.primary.thermal.percentile, '%', 0)}` : '—'}</strong>
             </div>
             <div className="env-detail-stat">
-              <span className="env-detail-stat-label">Cool Island Rank</span>
+              <span className="env-detail-stat-label">Cool Islands Rank</span>
               <strong>{rankSummary?.primary?.coolIsland ? `${rankSummary.primary.coolIsland.rank} / ${rankSummary.primary.coolIsland.total}` : '—'}</strong>
             </div>
             <div className="env-detail-stat">
@@ -251,7 +251,7 @@ const EcologyHeatDetailPanel = ({
             <div className="ecology-detail-column">
               <div className="ecology-driver-grid ecology-primary-grid">
                 <div className="ecology-driver-card">
-                  <span>Urban Heat Score</span>
+                  <span>Heat Island Score</span>
                   <strong>{formatValue(currentPrimary.urban_heat_score)}</strong>
                 </div>
                 <div className="ecology-driver-card">
@@ -259,7 +259,7 @@ const EcologyHeatDetailPanel = ({
                   <strong>{formatValue(currentPrimary.thermal_percentile, '%')}</strong>
                 </div>
                 <div className="ecology-driver-card">
-                  <span>Cool Island Score</span>
+                  <span>Cool Islands Score</span>
                   <strong>{formatValue(currentPrimary.cool_island_score)}</strong>
                 </div>
                 <div className="ecology-driver-card">
@@ -276,7 +276,7 @@ const EcologyHeatDetailPanel = ({
                   </div>
                   <div className="ecology-compare-grid">
                     <div className="ecology-compare-chip">
-                      <span>Urban Heat</span>
+                      <span>Heat Islands</span>
                       <strong>{formatValue(currentCompare.urban_heat_score)}</strong>
                     </div>
                     <div className="ecology-compare-chip">
@@ -284,7 +284,7 @@ const EcologyHeatDetailPanel = ({
                       <strong>{formatValue(currentCompare.thermal_percentile, '%')}</strong>
                     </div>
                     <div className="ecology-compare-chip">
-                      <span>Cool Island</span>
+                      <span>Cool Islands</span>
                       <strong>{formatValue(currentCompare.cool_island_score)}</strong>
                     </div>
                     <div className="ecology-compare-chip">
@@ -298,7 +298,7 @@ const EcologyHeatDetailPanel = ({
               <div className="ecology-chart-card">
                 <div className="ecology-chart-head">
                   <span>Heat Pressure Over Time</span>
-                  <strong>Urban heat only</strong>
+                  <strong>Heat islands only</strong>
                 </div>
                 <ResponsiveContainer width="100%" height={250}>
                   <LineChart data={mergedTimeline} margin={{ top: 6, right: 14, left: -16, bottom: 6 }}>
@@ -309,17 +309,17 @@ const EcologyHeatDetailPanel = ({
                       contentStyle={{ backgroundColor: '#101826', border: '1px solid #233047', borderRadius: 10, fontSize: 11, color: '#e2e8f0' }}
                       formatter={(value, key) => {
                         const labelMap = {
-                          primaryUrbanHeat: `A urban heat`,
-                          compareUrbanHeat: `B urban heat`
+                          primaryUrbanHeat: 'A heat islands',
+                          compareUrbanHeat: 'B heat islands'
                         }
                         return [value != null ? Number(value).toFixed(1) : '—', labelMap[key] || key]
                       }}
                     />
                     <Legend wrapperStyle={{ fontSize: 10, color: '#94a3b8' }} />
-                    <Line type="monotone" dataKey="primaryUrbanHeat" name="A urban heat" stroke={metricMeta.urban_heat_score.color} strokeWidth={2.8} dot={{ r: 3 }} connectNulls />
+                    <Line type="monotone" dataKey="primaryUrbanHeat" name="A heat islands" stroke={metricMeta.urban_heat_score.color} strokeWidth={2.8} dot={{ r: 3 }} connectNulls />
                     {currentCompare && (
                       <>
-                        <Line type="monotone" dataKey="compareUrbanHeat" name="B urban heat" stroke="#67e8f9" strokeWidth={2.8} strokeDasharray="5 3" dot={{ r: 3 }} connectNulls />
+                        <Line type="monotone" dataKey="compareUrbanHeat" name="B heat islands" stroke="#67e8f9" strokeWidth={2.8} strokeDasharray="5 3" dot={{ r: 3 }} connectNulls />
                       </>
                     )}
                   </LineChart>
@@ -344,8 +344,8 @@ const EcologyHeatDetailPanel = ({
                         const labelMap = {
                           primaryThermal: `A thermal percentile`,
                           compareThermal: `B thermal percentile`,
-                          primaryCoolIsland: `A cool island`,
-                          compareCoolIsland: `B cool island`,
+                          primaryCoolIsland: 'A cool islands',
+                          compareCoolIsland: 'B cool islands',
                           primaryHealth: `A health`,
                           compareHealth: `B health`
                         }
@@ -354,12 +354,12 @@ const EcologyHeatDetailPanel = ({
                     />
                     <Legend wrapperStyle={{ fontSize: 10, color: '#94a3b8' }} />
                     <Line type="monotone" dataKey="primaryThermal" name="A thermal" stroke={metricMeta.thermal_percentile.color} strokeWidth={2.4} dot={{ r: 3 }} connectNulls />
-                    <Line type="monotone" dataKey="primaryCoolIsland" name="A cool island" stroke={metricMeta.cool_island_score.color} strokeWidth={2.4} dot={{ r: 3 }} connectNulls />
+                    <Line type="monotone" dataKey="primaryCoolIsland" name="A cool islands" stroke={metricMeta.cool_island_score.color} strokeWidth={2.4} dot={{ r: 3 }} connectNulls />
                     <Line type="monotone" dataKey="primaryHealth" name="A health" stroke={metricMeta.health_score.color} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                     {currentCompare && (
                       <>
                         <Line type="monotone" dataKey="compareThermal" name="B thermal" stroke="#fb7185" strokeWidth={2.2} strokeDasharray="5 3" dot={{ r: 3 }} connectNulls />
-                        <Line type="monotone" dataKey="compareCoolIsland" name="B cool island" stroke="#a5f3fc" strokeWidth={2.2} strokeDasharray="5 3" dot={{ r: 3 }} connectNulls />
+                        <Line type="monotone" dataKey="compareCoolIsland" name="B cool islands" stroke="#a5f3fc" strokeWidth={2.2} strokeDasharray="5 3" dot={{ r: 3 }} connectNulls />
                         <Line type="monotone" dataKey="compareHealth" name="B health" stroke="#bbf7d0" strokeWidth={1.8} strokeDasharray="4 3" dot={{ r: 2 }} connectNulls />
                       </>
                     )}

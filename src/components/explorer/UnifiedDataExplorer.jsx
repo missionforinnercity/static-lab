@@ -1,19 +1,19 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import proj4 from 'proj4'
-import ExplorerMap from './ExplorerMap'
-import BusinessAnalytics from './BusinessAnalytics'
-import WalkabilityAnalytics from './WalkabilityAnalytics'
-import LightingAnalytics from './LightingAnalytics'
-import TemperatureAnalytics from './TemperatureAnalytics'
-import GreeneryAnalytics from './GreeneryAnalytics'
-import EnvironmentAnalytics from './EnvironmentAnalytics'
-import EcologyHeatAnalytics from './EcologyHeatAnalytics'
-import EcologyHeatDetailPanel from './EcologyHeatDetailPanel'
-import DateAvailabilityCalendar from './DateAvailabilityCalendar'
 import TrafficAnalytics, { TRAFFIC_SCENARIOS } from './TrafficAnalytics'
-import { generateReport } from '../../utils/reportGenerator'
 import './UnifiedDataExplorer.css'
+
+const ExplorerMap = lazy(() => import('./ExplorerMap'))
+const BusinessAnalytics = lazy(() => import('./BusinessAnalytics'))
+const WalkabilityAnalytics = lazy(() => import('./WalkabilityAnalytics'))
+const LightingAnalytics = lazy(() => import('./LightingAnalytics'))
+const TemperatureAnalytics = lazy(() => import('./TemperatureAnalytics'))
+const GreeneryAnalytics = lazy(() => import('./GreeneryAnalytics'))
+const EnvironmentAnalytics = lazy(() => import('./EnvironmentAnalytics'))
+const EcologyHeatAnalytics = lazy(() => import('./EcologyHeatAnalytics'))
+const EcologyHeatDetailPanel = lazy(() => import('./EcologyHeatDetailPanel'))
+const DateAvailabilityCalendar = lazy(() => import('./DateAvailabilityCalendar'))
 
 // Define coordinate reference systems
 proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs')
@@ -135,7 +135,7 @@ const LAYER_CATEGORIES = [
   { id: 'surfaceTemperature', label: 'Surface Temperature', dashboard: 'temperature', dataKey: 'temperatureSegments' },
   // Environment layers (greenery + air quality)
   { id: 'airQuality',   label: 'Air Quality',  dashboard: 'environment', dataKey: 'airQualityVoronoi' },
-  { id: 'urbanHeatConcrete', label: 'Urban Heat & Concrete', dashboard: 'environment', dataKey: 'ecologyHeat' },
+  { id: 'urbanHeatConcrete', label: 'Heat Islands & Cool Islands', dashboard: 'environment', dataKey: 'ecologyHeat' },
   { id: 'greeneryIndex', label: 'Greenery Index', dashboard: 'environment', dataKey: 'greenerySegments' },
   { id: 'treeCanopy', label: 'Tree Canopy', dashboard: 'environment', dataKey: 'treeCanopy' },
   { id: 'parksNearby', label: 'Parks Nearby', dashboard: 'environment', dataKey: 'parksNearby' },
@@ -1184,6 +1184,7 @@ const UnifiedDataExplorer = () => {
     setDrawBboxMode(false)
     setIsExporting(true)
     try {
+      const { generateReport } = await import('../../utils/reportGenerator')
       await generateReport(map, layerStack, {
         businessesData,
         streetStallsData,
@@ -1313,47 +1314,48 @@ const UnifiedDataExplorer = () => {
         <aside className="explorer-sidebar" style={{ width: sidebarWidth }}>
           <div className="sidebar-resize-handle" onMouseDown={startSidebarDrag} />
           {/* Dashboard-specific content */}
-          {dashboardMode === 'business' && (
-            <BusinessAnalytics
-              businessMode={businessMode}
-              onModeChange={(mode) => {
-                setBusinessMode(mode)
-                // Map business mode back to category
-                const categoryMap = {
-                  liveliness: 'businessLiveliness',
-                  opinions: 'vendorOpinions',
-                  ratings: 'businessRatings',
-                  amenities: 'amenities',
-                  categories: 'businessCategories',
-                  property: 'propertySales',
-                  events: 'cityEvents'
-                }
-                if (categoryMap[mode]) {
-                  selectCategory(categoryMap[mode])
-                }
-              }}
-              dayOfWeek={dayOfWeek}
-              hour={hour}
-              onDayChange={setDayOfWeek}
-              onHourChange={setHour}
-              businessesData={businessesData}
-              streetStallsData={streetStallsData}
-              propertiesData={propertiesData}
-              surveyData={surveyData}
-              opinionSource={opinionSource}
-              onOpinionSourceChange={setOpinionSource}
-              amenitiesFilters={amenitiesFilters}
-              onAmenitiesFiltersChange={setAmenitiesFilters}
-              categoriesFilters={categoriesFilters}
-              onCategoriesFiltersChange={setCategoriesFilters}
-              expandedGroups={expandedGroups}
-              onExpandedGroupsChange={setExpandedGroups}
-              eventsData={eventsData}
-              eventsMonth={eventsMonth}
-              onEventsMonthChange={setEventsMonth}
-              hideLayerControls={true}
-            />
-          )}
+          <Suspense fallback={<div className="app-panel-loading">Loading analytics panel...</div>}>
+            {dashboardMode === 'business' && (
+              <BusinessAnalytics
+                businessMode={businessMode}
+                onModeChange={(mode) => {
+                  setBusinessMode(mode)
+                  // Map business mode back to category
+                  const categoryMap = {
+                    liveliness: 'businessLiveliness',
+                    opinions: 'vendorOpinions',
+                    ratings: 'businessRatings',
+                    amenities: 'amenities',
+                    categories: 'businessCategories',
+                    property: 'propertySales',
+                    events: 'cityEvents'
+                  }
+                  if (categoryMap[mode]) {
+                    selectCategory(categoryMap[mode])
+                  }
+                }}
+                dayOfWeek={dayOfWeek}
+                hour={hour}
+                onDayChange={setDayOfWeek}
+                onHourChange={setHour}
+                businessesData={businessesData}
+                streetStallsData={streetStallsData}
+                propertiesData={propertiesData}
+                surveyData={surveyData}
+                opinionSource={opinionSource}
+                onOpinionSourceChange={setOpinionSource}
+                amenitiesFilters={amenitiesFilters}
+                onAmenitiesFiltersChange={setAmenitiesFilters}
+                categoriesFilters={categoriesFilters}
+                onCategoriesFiltersChange={setCategoriesFilters}
+                expandedGroups={expandedGroups}
+                onExpandedGroupsChange={setExpandedGroups}
+                eventsData={eventsData}
+                eventsMonth={eventsMonth}
+                onEventsMonthChange={setEventsMonth}
+                hideLayerControls={true}
+              />
+            )}
 
           {/* Business category stats panel */}
           {dashboardMode === 'business' && (() => {
@@ -1432,88 +1434,89 @@ const UnifiedDataExplorer = () => {
             )
           })()}
 
-          {dashboardMode === 'walkability' && (
-            <WalkabilityAnalytics
-              walkabilityMode={walkabilityMode}
-              onWalkabilityModeChange={(mode) => {
-                setWalkabilityMode(mode)
-                // Map walkability mode back to category
-                const categoryMap = {
-                  pedestrian: 'pedestrianRoutes',
-                  cycling: 'cyclingRoutes',
-                  network: 'networkAnalysis',
-                  transit: 'transitAccessibility'
-                }
-                if (categoryMap[mode]) {
-                  selectCategory(categoryMap[mode])
-                }
-              }}
-              networkMetric={networkMetric}
-              onNetworkMetricChange={setNetworkMetric}
-              transitView={transitView}
-              onTransitViewChange={setTransitView}
-              pedestrianData={pedestrianData}
-              cyclingData={cyclingData}
-              networkData={networkData}
-              transitData={transitData}
-              hideLayerControls={true}
-              selectedSegment={selectedRouteSegment}
-            />
-          )}
+            {dashboardMode === 'walkability' && (
+              <WalkabilityAnalytics
+                walkabilityMode={walkabilityMode}
+                onWalkabilityModeChange={(mode) => {
+                  setWalkabilityMode(mode)
+                  // Map walkability mode back to category
+                  const categoryMap = {
+                    pedestrian: 'pedestrianRoutes',
+                    cycling: 'cyclingRoutes',
+                    network: 'networkAnalysis',
+                    transit: 'transitAccessibility'
+                  }
+                  if (categoryMap[mode]) {
+                    selectCategory(categoryMap[mode])
+                  }
+                }}
+                networkMetric={networkMetric}
+                onNetworkMetricChange={setNetworkMetric}
+                transitView={transitView}
+                onTransitViewChange={setTransitView}
+                pedestrianData={pedestrianData}
+                cyclingData={cyclingData}
+                networkData={networkData}
+                transitData={transitData}
+                hideLayerControls={true}
+                selectedSegment={selectedRouteSegment}
+              />
+            )}
           
-          {dashboardMode === 'lighting' && (
-            <LightingAnalytics
-              segmentsData={lightingSegments}
-              projectsData={missionInterventions}
-              streetLightsData={streetLights}
-              lightingThresholds={lightingThresholds}
-              hideLayerControls={true}
-            />
-          )}
+            {dashboardMode === 'lighting' && (
+              <LightingAnalytics
+                segmentsData={lightingSegments}
+                projectsData={missionInterventions}
+                streetLightsData={streetLights}
+                lightingThresholds={lightingThresholds}
+                hideLayerControls={true}
+              />
+            )}
           
-          {dashboardMode === 'temperature' && (
-            <TemperatureAnalytics
-              temperatureData={temperatureData}
-              hideLayerControls={true}
-            />
-          )}
+            {dashboardMode === 'temperature' && (
+              <TemperatureAnalytics
+                temperatureData={temperatureData}
+                hideLayerControls={true}
+              />
+            )}
           
-          {dashboardMode === 'environment' && (
-            <>
-              {activeCategory === 'urbanHeatConcrete' ? (
-                <EcologyHeatAnalytics
-                  currentData={ecologyCurrentData}
-                  ecologyYear={ecologyYear}
-                  onEcologyYearChange={setEcologyYear}
-                  ecologyMetric={ecologyMetric}
-                  onEcologyMetricChange={setEcologyMetric}
-                  selectedFeature={selectedEcologyFeature}
-                  selectedSeries={selectedEcologyFeatureSeries}
-                  comparisonFeature={compareEcologyFeature}
-                  comparisonSeries={compareEcologyFeatureSeries}
-                />
-              ) : (
-                <>
-                  <EnvironmentAnalytics
-                    currentData={envDisplayData}
-                    historyData={envHistoryData}
-                    envIndex={envIndex}
-                    onEnvIndexChange={setEnvIndex}
-                    envDate={envDate}
-                    onEnvDateChange={setEnvDate}
+            {dashboardMode === 'environment' && (
+              <>
+                {activeCategory === 'urbanHeatConcrete' ? (
+                  <EcologyHeatAnalytics
+                    currentData={ecologyCurrentData}
+                    ecologyYear={ecologyYear}
+                    onEcologyYearChange={setEcologyYear}
+                    ecologyMetric={ecologyMetric}
+                    onEcologyMetricChange={setEcologyMetric}
+                    selectedFeature={selectedEcologyFeature}
+                    selectedSeries={selectedEcologyFeatureSeries}
+                    comparisonFeature={compareEcologyFeature}
+                    comparisonSeries={compareEcologyFeatureSeries}
                   />
-                  <GreeneryAnalytics
-                    shadeData={shadeData}
-                    greeneryAndSkyview={greeneryAndSkyview}
-                    treeCanopyData={treeCanopyData}
-                    parksData={parksData}
-                    hideLayerControls={true}
-                    allLayersActive={LAYER_CATEGORIES.filter(c => c.dashboard === 'environment').every(c => layerStack.some(l => l.id === c.id))}
-                  />
-                </>
-              )}
-            </>
-          )}
+                ) : (
+                  <>
+                    <EnvironmentAnalytics
+                      currentData={envDisplayData}
+                      historyData={envHistoryData}
+                      envIndex={envIndex}
+                      onEnvIndexChange={setEnvIndex}
+                      envDate={envDate}
+                      onEnvDateChange={setEnvDate}
+                    />
+                    <GreeneryAnalytics
+                      shadeData={shadeData}
+                      greeneryAndSkyview={greeneryAndSkyview}
+                      treeCanopyData={treeCanopyData}
+                      parksData={parksData}
+                      hideLayerControls={true}
+                      allLayersActive={LAYER_CATEGORIES.filter(c => c.dashboard === 'environment').every(c => layerStack.some(l => l.id === c.id))}
+                    />
+                  </>
+                )}
+              </>
+            )}
+          </Suspense>
 
           {dashboardMode === 'traffic' && (
             <TrafficAnalytics
@@ -1551,65 +1554,67 @@ const UnifiedDataExplorer = () => {
         </aside>
         
         <main className="explorer-map-container">
-          <ExplorerMap
-            dashboardMode={dashboardMode}
-            businessMode={businessMode}
-            walkabilityMode={walkabilityMode}
-            networkMetric={networkMetric}
-            transitView={transitView}
-            dayOfWeek={dayOfWeek}
-            hour={hour}
-            businessesData={businessesData}
-            streetStallsData={streetStallsData}
-            surveyData={surveyData}
-            propertiesData={propertiesData}
-            networkData={networkData}
-            pedestrianData={pedestrianData}
-            cyclingData={cyclingData}
-            transitData={transitData}
-            busStopsData={busStopsData}
-            trainStationData={trainStationData}
-            lightingSegments={lightingSegments}
-            streetLights={streetLights}
-            missionInterventions={missionInterventions}
-            lightingThresholds={lightingThresholds}
-            temperatureData={temperatureData}
-            shadeData={shadeData}
-            season={season}
-            greeneryAndSkyview={greeneryAndSkyview}
-            treeCanopyData={treeCanopyData}
-            parksData={parksData}
-            ecologyHeatData={ecologyCurrentData}
-            ecologyMetric={ecologyMetric}
-            selectedEcologyFeatureKeys={selectedEcologyFeatureKeys}
-            envCurrentData={envDisplayData}
-            envHistoryData={envHistoryData}
-            envIndex={envIndex}
-            onEnvGridDetail={openEnvGridDetail}
-            onEcologyFeatureSelect={openEcologyFeatureDetail}
-            visibleLayers={visibleLayers}
-            layerStack={layerStack}
-            activeCategory={activeCategory}
-            onMapLoad={setMap}
-            drawBboxMode={drawBboxMode}
-            onBboxDrawn={handleBboxDrawn}
-            opinionSource={opinionSource}
-            amenitiesFilters={amenitiesFilters}
-            categoriesFilters={categoriesFilters}
-            eventsData={eventsData}
-            eventsMonth={eventsMonth}
-            trafficData={trafficData}
-            trafficScenario={trafficScenario}
-            ratingFilter={ratingFilter ? Array.from(ratingFilter) : null}
-            selectedSegment={selectedSegment}
-            onSegmentSelect={setSelectedSegment}
-            onRouteSegmentClick={(segment, mode) => {
-              setSelectedRouteSegment(segment)
-              if (mode !== walkabilityMode) {
-                setWalkabilityMode(mode)
-              }
-            }}
-          />
+          <Suspense fallback={<div className="app-map-loading">Loading explorer map...</div>}>
+            <ExplorerMap
+              dashboardMode={dashboardMode}
+              businessMode={businessMode}
+              walkabilityMode={walkabilityMode}
+              networkMetric={networkMetric}
+              transitView={transitView}
+              dayOfWeek={dayOfWeek}
+              hour={hour}
+              businessesData={businessesData}
+              streetStallsData={streetStallsData}
+              surveyData={surveyData}
+              propertiesData={propertiesData}
+              networkData={networkData}
+              pedestrianData={pedestrianData}
+              cyclingData={cyclingData}
+              transitData={transitData}
+              busStopsData={busStopsData}
+              trainStationData={trainStationData}
+              lightingSegments={lightingSegments}
+              streetLights={streetLights}
+              missionInterventions={missionInterventions}
+              lightingThresholds={lightingThresholds}
+              temperatureData={temperatureData}
+              shadeData={shadeData}
+              season={season}
+              greeneryAndSkyview={greeneryAndSkyview}
+              treeCanopyData={treeCanopyData}
+              parksData={parksData}
+              ecologyHeatData={ecologyCurrentData}
+              ecologyMetric={ecologyMetric}
+              selectedEcologyFeatureKeys={selectedEcologyFeatureKeys}
+              envCurrentData={envDisplayData}
+              envHistoryData={envHistoryData}
+              envIndex={envIndex}
+              onEnvGridDetail={openEnvGridDetail}
+              onEcologyFeatureSelect={openEcologyFeatureDetail}
+              visibleLayers={visibleLayers}
+              layerStack={layerStack}
+              activeCategory={activeCategory}
+              onMapLoad={setMap}
+              drawBboxMode={drawBboxMode}
+              onBboxDrawn={handleBboxDrawn}
+              opinionSource={opinionSource}
+              amenitiesFilters={amenitiesFilters}
+              categoriesFilters={categoriesFilters}
+              eventsData={eventsData}
+              eventsMonth={eventsMonth}
+              trafficData={trafficData}
+              trafficScenario={trafficScenario}
+              ratingFilter={ratingFilter ? Array.from(ratingFilter) : null}
+              selectedSegment={selectedSegment}
+              onSegmentSelect={setSelectedSegment}
+              onRouteSegmentClick={(segment, mode) => {
+                setSelectedRouteSegment(segment)
+                if (mode !== walkabilityMode) {
+                  setWalkabilityMode(mode)
+                }
+              }}
+            />
+          </Suspense>
           
           {/* Listen for clear segment selection event */}
           {React.useEffect(() => {
@@ -1847,12 +1852,14 @@ const UnifiedDataExplorer = () => {
                         <div className="env-detail-toolbar-label">Time Lens</div>
                         <div className="env-detail-toolbar-subtitle">Hourly chart follows the selected map day</div>
                       </div>
-                      <DateAvailabilityCalendar
-                        availableDates={availableDays}
-                        selectedDate={envDate}
-                        onChange={setEnvDate}
-                        label="Detail day"
-                      />
+                      <Suspense fallback={<div className="app-panel-loading">Loading date selector...</div>}>
+                        <DateAvailabilityCalendar
+                          availableDates={availableDays}
+                          selectedDate={envDate}
+                          onChange={setEnvDate}
+                          label="Detail day"
+                        />
+                      </Suspense>
                     </div>
 
                     <div className="env-detail-summary-row">
@@ -1966,19 +1973,21 @@ const UnifiedDataExplorer = () => {
           })()}
 
           {dashboardMode === 'environment' && activeCategory === 'urbanHeatConcrete' && selectedEcologyFeature && (
-            <EcologyHeatDetailPanel
-              featureSeries={selectedEcologyFeatureSeries}
-              currentFeature={selectedEcologyFeature}
-              compareFeature={compareEcologyFeature}
-              compareSeries={compareEcologyFeatureSeries}
-              currentYearData={ecologyCurrentData}
-              selectedYear={ecologyYear}
-              sidebarWidth={sidebarWidth}
-              panelRef={ecologyDetailPanelRef}
-              minimized={ecologyPanelMinimized}
-              onToggleMinimized={() => setEcologyPanelMinimized(current => !current)}
-              onClose={() => { setSelectedEcologyFeatureKeys([]); setEcologyPanelMinimized(false) }}
-            />
+            <Suspense fallback={<div className="app-panel-loading">Loading ecology detail...</div>}>
+              <EcologyHeatDetailPanel
+                featureSeries={selectedEcologyFeatureSeries}
+                currentFeature={selectedEcologyFeature}
+                compareFeature={compareEcologyFeature}
+                compareSeries={compareEcologyFeatureSeries}
+                currentYearData={ecologyCurrentData}
+                selectedYear={ecologyYear}
+                sidebarWidth={sidebarWidth}
+                panelRef={ecologyDetailPanelRef}
+                minimized={ecologyPanelMinimized}
+                onToggleMinimized={() => setEcologyPanelMinimized(current => !current)}
+                onClose={() => { setSelectedEcologyFeatureKeys([]); setEcologyPanelMinimized(false) }}
+              />
+            </Suspense>
           )}
         </main>
 

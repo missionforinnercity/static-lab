@@ -138,6 +138,30 @@
   width: 100%;
 }
 
+.app-loading-screen,
+.app-map-loading,
+.app-panel-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.78);
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.app-loading-screen,
+.app-map-loading {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(0, 229, 160, 0.12), transparent 32%),
+    #111118;
+}
+
+.app-panel-loading {
+  min-height: 180px;
+  padding: 24px;
+}
+
 /* Dark sidebar for District Narrative Engine */
 .sidebar--dark {
   background: rgba(200, 210, 220, 0.10);

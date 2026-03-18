@@ -1,14 +1,15 @@
-import React, { useState, useCallback } from 'react'
-import Map from './components/Map'
+import React, { useState, useCallback, lazy, Suspense } from 'react'
 import ModeToggle from './components/ModeToggle'
-import NarrativeDistricts from './components/NarrativeDistricts'
-import DistrictStatsPanel from './components/DistrictStatsPanel'
-import DistrictCompare from './components/DistrictCompare'
-import WalkabilityPanel from './components/WalkabilityPanel'
-import StreetCompare from './components/StreetCompare'
-import DataExplorer from './components/DataExplorer'
-import WardExplorer from './components/WardExplorer'
 import './App.css'
+
+const Map = lazy(() => import('./components/Map'))
+const NarrativeDistricts = lazy(() => import('./components/NarrativeDistricts'))
+const DistrictStatsPanel = lazy(() => import('./components/DistrictStatsPanel'))
+const DistrictCompare = lazy(() => import('./components/DistrictCompare'))
+const WalkabilityPanel = lazy(() => import('./components/WalkabilityPanel'))
+const StreetCompare = lazy(() => import('./components/StreetCompare'))
+const DataExplorer = lazy(() => import('./components/DataExplorer'))
+const WardExplorer = lazy(() => import('./components/WardExplorer'))
 
 function App() {
   const [showLanding, setShowLanding] = useState(true)
@@ -89,7 +90,11 @@ function App() {
   }, [])
 
   if (showLanding) {
-    return <WardExplorer onEnterDashboard={() => setShowLanding(false)} />
+    return (
+      <Suspense fallback={<div className="app-loading-screen">Loading neighbourhood view...</div>}>
+        <WardExplorer onEnterDashboard={() => setShowLanding(false)} />
+      </Suspense>
+    )
   }
 
   return (
@@ -132,68 +137,75 @@ function App() {
               </div>
 
               {narrativeTab === 'districts' ? (
-                <NarrativeDistricts
-                  selectedDistrictId={selectedDistrictId}
-                  onDistrictSelect={handleDistrictSelect}
-                  onLayersChange={setActiveLayers}
-
-                />
+                <Suspense fallback={<div className="app-panel-loading">Loading district explorer...</div>}>
+                  <NarrativeDistricts
+                    selectedDistrictId={selectedDistrictId}
+                    onDistrictSelect={handleDistrictSelect}
+                    onLayersChange={setActiveLayers}
+                  />
+                </Suspense>
               ) : (
-                <WalkabilityPanel
-                  onWalkabilityChange={setWalkabilityData}
-                  compareCount={compareSegments.length}
-                  onSegmentClick={handleSegmentClick}
-                />
+                <Suspense fallback={<div className="app-panel-loading">Loading walkability tools...</div>}>
+                  <WalkabilityPanel
+                    onWalkabilityChange={setWalkabilityData}
+                    compareCount={compareSegments.length}
+                    onSegmentClick={handleSegmentClick}
+                  />
+                </Suspense>
               )}
             </aside>
 
             <main className="map-container">
-              <Map
-                mode={mode}
-                activeLayers={activeLayers}
-                temporalState={{ season: 'summer', timeOfDay: '1400', hour: 14 }}
-                explorerFilters={explorerFilters}
-                selectedTour={null}
-                districtGeoJSON={districtGeoJSON}
-                selectedDistrictId={selectedDistrictId}
-                districtBounds={districtBounds}
-                onDistrictClick={handleDistrictClick}
-                compareDistricts={compareDistricts}
-                showDistricts={narrativeTab === 'districts'}
-                walkabilityData={walkabilityData}
-                onSegmentClick={handleSegmentClick}
-                compareSegments={compareSegments}
-                focusedSegment={focusedSegment}
-              />
-              {narrativeTab === 'districts' && (
-                <DistrictStatsPanel
-                  feature={selectedDistrictFeature}
-                  onClose={() => setSelectedDistrictFeature(null)}
+              <Suspense fallback={<div className="app-map-loading">Loading map...</div>}>
+                <Map
+                  mode={mode}
+                  activeLayers={activeLayers}
+                  temporalState={{ season: 'summer', timeOfDay: '1400', hour: 14 }}
+                  explorerFilters={explorerFilters}
+                  selectedTour={null}
+                  districtGeoJSON={districtGeoJSON}
+                  selectedDistrictId={selectedDistrictId}
+                  districtBounds={districtBounds}
+                  onDistrictClick={handleDistrictClick}
+                  compareDistricts={compareDistricts}
+                  showDistricts={narrativeTab === 'districts'}
+                  walkabilityData={walkabilityData}
+                  onSegmentClick={handleSegmentClick}
+                  compareSegments={compareSegments}
+                  focusedSegment={focusedSegment}
                 />
-              )}
-              {narrativeTab === 'districts' && compareDistricts.length > 0 && (
-                <DistrictCompare
-                  districts={compareDistricts}
-                  onClose={() => setCompareDistricts([])}
-                  onClear={() => setCompareDistricts([])}
-                />
-              )}
-              {narrativeTab === 'walkability' && compareSegments.length > 0 && (
-                <StreetCompare
-                  segments={compareSegments}
-                  onClose={() => setCompareSegments([])}
-                  onClear={() => setCompareSegments([])}
-                />
-              )}
+                {narrativeTab === 'districts' && (
+                  <DistrictStatsPanel
+                    feature={selectedDistrictFeature}
+                    onClose={() => setSelectedDistrictFeature(null)}
+                  />
+                )}
+                {narrativeTab === 'districts' && compareDistricts.length > 0 && (
+                  <DistrictCompare
+                    districts={compareDistricts}
+                    onClose={() => setCompareDistricts([])}
+                    onClear={() => setCompareDistricts([])}
+                  />
+                )}
+                {narrativeTab === 'walkability' && compareSegments.length > 0 && (
+                  <StreetCompare
+                    segments={compareSegments}
+                    onClose={() => setCompareSegments([])}
+                    onClear={() => setCompareSegments([])}
+                  />
+                )}
+              </Suspense>
             </main>
           </>
         ) : (
-          <DataExplorer
-            filters={explorerFilters}
-            onFiltersChange={setExplorerFilters}
-            activeLayers={activeLayers}
-            onLayersChange={setActiveLayers}
-          />
+          <Suspense fallback={<div className="app-loading-screen">Loading data explorer...</div>}>
+            <DataExplorer
+              filters={explorerFilters}
+              onFiltersChange={setExplorerFilters}
+              activeLayers={activeLayers}
+              onLayersChange={setActiveLayers}
+            />
+          </Suspense>
         )}
       </div>
     </div>

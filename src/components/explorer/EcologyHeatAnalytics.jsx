@@ -5,20 +5,20 @@ const YEARS = [2020, 2021, 2022, 2023, 2024, 2025, 2026]
 const ECOLOGY_METRICS = [
   {
     id: 'urban_heat_score',
-    label: 'Urban Heat',
-    description: 'Priority heat pressure',
+    label: 'Heat Islands',
+    description: 'Extreme heat hotspots only',
     gradient: 'linear-gradient(90deg, #fff7ed 0%, #fdba74 38%, #f97316 68%, #7f1d1d 100%)'
   },
   {
     id: 'thermal_percentile',
     label: 'Thermal %',
-    description: 'Relative heat rank',
+    description: 'Full thermal layer',
     gradient: 'linear-gradient(90deg, #f8fafc 0%, #fde68a 28%, #f59e0b 62%, #991b1b 100%)'
   },
   {
     id: 'cool_island_score',
     label: 'Cool Islands',
-    description: 'Cooling refuge strength',
+    description: 'Strongest cooling refuges only',
     gradient: 'linear-gradient(90deg, #fff7ed 0%, #bfdbfe 24%, #22d3ee 58%, #0f766e 100%)'
   },
   {
@@ -81,9 +81,9 @@ const selectionLabel = (feature) => {
 }
 
 const metricCards = (feature) => [
-  { label: 'Urban Heat', value: formatValue(numberOrNull(feature?.urban_heat_score)) },
+  { label: 'Heat Islands', value: formatValue(numberOrNull(feature?.urban_heat_score)) },
   { label: 'Thermal %', value: formatValue(numberOrNull(feature?.thermal_percentile), '%') },
-  { label: 'Cool Island', value: formatValue(numberOrNull(feature?.cool_island_score)) },
+  { label: 'Cool Islands', value: formatValue(numberOrNull(feature?.cool_island_score)) },
   { label: 'Health', value: formatValue(numberOrNull(feature?.health_score)) }
 ]
 
@@ -167,8 +167,8 @@ const EcologyHeatAnalytics = ({
       <div className="eco-hero">
         <div>
           <div className="eco-kicker">Heat Atlas</div>
-          <h3>CBD Thermal Pressure</h3>
-          <p>Urban heat score and thermal percentile drive the map. Cool island score reveals refuge strength, while health score stays secondary.</p>
+          <h3>CBD Heat Islands</h3>
+          <p>Heat Islands and Cool Islands now isolate only the most extreme sections on the map, so the view reads like hotspot and refuge islands instead of a continuous blanket.</p>
         </div>
         <div className="eco-year-badge">{ecologyYear}</div>
       </div>
@@ -196,7 +196,7 @@ const EcologyHeatAnalytics = ({
       {summary && (
         <div className="eco-summary-grid">
           <article className="warm">
-            <span>Average Urban Heat</span>
+            <span>Average Heat Islands</span>
             <strong>{formatValue(summary.avgUrbanHeat)}</strong>
             <p>Combined heat priority across all mapped sections.</p>
           </article>
@@ -206,7 +206,7 @@ const EcologyHeatAnalytics = ({
             <p>Relative heat standing across the CBD.</p>
           </article>
           <article className="cool">
-            <span>Average Cool Island</span>
+            <span>Average Cool Islands</span>
             <strong>{formatValue(summary.avgCoolIsland)}</strong>
             <p>Cooling refuge strength from canopy, vegetation, and water.</p>
           </article>
@@ -252,7 +252,7 @@ const EcologyHeatAnalytics = ({
         <div>
           <span>Hottest This Year</span>
           <strong>{summary?.hottestFeature ? `#${summary.hottestFeature.feature_id}` : '—'}</strong>
-          <p>{formatValue(numberOrNull(summary?.hottestFeature?.urban_heat_score))} urban heat score</p>
+          <p>{formatValue(numberOrNull(summary?.hottestFeature?.urban_heat_score))} heat island score</p>
         </div>
         <div>
           <span>Strongest Refuge</span>

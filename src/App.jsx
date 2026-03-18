@@ -13,6 +13,7 @@ const WardExplorer = lazy(() => import('./components/WardExplorer'))
 
 function App() {
   const [showLanding, setShowLanding] = useState(true)
+  const [landingSession, setLandingSession] = useState(0)
   const [mode, setMode] = useState('narrative') // 'narrative' | 'explorer'
   const [narrativeTab, setNarrativeTab] = useState('districts') // 'districts' | 'walkability'
   const [activeLayers, setActiveLayers] = useState({
@@ -89,10 +90,26 @@ function App() {
     })
   }, [])
 
+  const handleReturnToLanding = useCallback(() => {
+    if (mode === 'explorer') {
+      window.localStorage.removeItem('explorer:activeCategory')
+      window.location.assign(`${window.location.pathname}${window.location.search}`)
+      return
+    }
+
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+    setMode('narrative')
+    setLandingSession(prev => prev + 1)
+    setShowLanding(true)
+  }, [mode])
+
   if (showLanding) {
     return (
       <Suspense fallback={<div className="app-loading-screen">Loading neighbourhood view...</div>}>
-        <WardExplorer onEnterDashboard={() => setShowLanding(false)} />
+        <WardExplorer
+          key={landingSession}
+          onEnterDashboard={() => setShowLanding(false)}
+        />
       </Suspense>
     )
   }
@@ -109,7 +126,10 @@ function App() {
         </div>
         <ModeToggle mode={mode} onModeChange={setMode} />
         <div className="app-header-actions">
-          <button className="app-back-btn" onClick={() => setShowLanding(true)}>
+          <button
+            className="app-back-btn"
+            onClick={handleReturnToLanding}
+          >
             ← Neighbourhood View
           </button>
         </div>

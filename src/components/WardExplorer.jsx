@@ -944,110 +944,146 @@ export default function WardExplorer({ onEnterDashboard }) {
   }, [])
 
   useEffect(() => {
-    if (!activeCollection || mapRef.current) return
+    if (!activeCollection || mapRef.current || !mapEl.current) return
 
-    const map = new mapboxgl.Map({
-      container: mapEl.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: BASE_MAP_VIEW.center,
-      zoom: BASE_MAP_VIEW.zoom,
-      pitch: BASE_MAP_VIEW.pitch,
-      bearing: BASE_MAP_VIEW.bearing,
-      attributionControl: false
-    })
+    let observer = null
+    let frameId = null
+    let cancelled = false
+    let map = null
 
-    mapRef.current = map
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
-    map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right')
+    const initializeMap = () => {
+      if (cancelled || mapRef.current || !mapEl.current) return
 
-    map.on('load', () => {
-      map.addSource(FEATURE_SOURCE_ID, {
-        type: 'geojson',
-        data: activeCollection,
-        promoteId: '__featureId'
+      const { clientWidth, clientHeight } = mapEl.current
+      if (clientWidth <= 0 || clientHeight <= 0) return
+
+      map = new mapboxgl.Map({
+        container: mapEl.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: BASE_MAP_VIEW.center,
+        zoom: BASE_MAP_VIEW.zoom,
+        pitch: BASE_MAP_VIEW.pitch,
+        bearing: BASE_MAP_VIEW.bearing,
+        attributionControl: false
       })
 
-      map.addLayer({
-        id: FEATURE_FILL_ID,
-        type: 'fill',
-        source: FEATURE_SOURCE_ID,
-        paint: {
-          'fill-color': activeMetric.high,
-          'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.92, ['boolean', ['feature-state', 'hover'], false], 0.84, 0.7]
+      mapRef.current = map
+      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right')
+      map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right')
+
+      map.on('load', () => {
+        map.addSource(FEATURE_SOURCE_ID, {
+          type: 'geojson',
+          data: activeCollection,
+          promoteId: '__featureId'
+        })
+
+        map.addLayer({
+          id: FEATURE_FILL_ID,
+          type: 'fill',
+          source: FEATURE_SOURCE_ID,
+          paint: {
+            'fill-color': activeMetric.high,
+            'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.92, ['boolean', ['feature-state', 'hover'], false], 0.84, 0.7]
+          }
+        })
+
+        map.addLayer({
+          id: FEATURE_OUTLINE_ID,
+          type: 'line',
+          source: FEATURE_SOURCE_ID,
+          paint: {
+            'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#ffffff', ['boolean', ['feature-state', 'hover'], false], 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0.18)'],
+            'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.2, ['boolean', ['feature-state', 'hover'], false], 1.2, 0.55]
+          }
+        })
+
+        map.addLayer({
+          id: FEATURE_LABEL_ID,
+          type: 'symbol',
+          source: FEATURE_SOURCE_ID,
+          minzoom: 10.8,
+          layout: {
+            'text-field': ['get', activeLens.nameKey],
+            'text-size': activeLensId === 'economy' ? 9 : 10,
+            'text-max-width': 8,
+            'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular']
+          },
+          paint: {
+            'text-color': 'rgba(255,255,255,0.64)',
+            'text-halo-color': 'rgba(7, 9, 20, 0.82)',
+            'text-halo-width': 1
+          }
+        })
+
+        applyActiveMetricColor(map, activeLensId, activeMetric, activeCollection)
+        applyActiveMetricVisibility(map, activeMetric)
+        map.resize()
+
+        map.on('mousemove', FEATURE_FILL_ID, (event) => {
+          const feature = event.features?.[0]
+          if (!feature) return
+          const featureId = feature.id ?? feature.properties?.__featureId
+          if (!featureId) return
+          if (hoveredFeatureIdRef.current && hoveredFeatureIdRef.current !== featureId) {
+            map.setFeatureState({ source: FEATURE_SOURCE_ID, id: hoveredFeatureIdRef.current }, { hover: false })
+          }
+          map.setFeatureState({ source: FEATURE_SOURCE_ID, id: featureId }, { hover: true })
+          hoveredFeatureIdRef.current = featureId
+          setHoveredFeatureId(featureId)
+          setHoveredPos({ x: event.point.x, y: event.point.y })
+          map.getCanvas().style.cursor = 'pointer'
+        })
+
+        map.on('mouseleave', FEATURE_FILL_ID, () => {
+          if (hoveredFeatureIdRef.current) {
+            map.setFeatureState({ source: FEATURE_SOURCE_ID, id: hoveredFeatureIdRef.current }, { hover: false })
+            hoveredFeatureIdRef.current = null
+          }
+          setHoveredFeatureId(null)
+          map.getCanvas().style.cursor = ''
+        })
+
+        map.on('click', FEATURE_FILL_ID, (event) => {
+          const feature = event.features?.[0]
+          if (!feature) return
+          const featureId = feature.id ?? feature.properties?.__featureId
+          if (!featureId) return
+          const fullFeature = activeCollectionRef.current?.features?.find((item) => String(item.id) === String(featureId))
+          setSelectedFeatureId(featureId)
+          setSelectedFeatureState(featureId)
+          fitFeatureOnMap(fullFeature)
+        })
+
+        setMapLoaded(true)
+      })
+    }
+
+    initializeMap()
+
+    if (!mapRef.current && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        if (mapRef.current) {
+          mapRef.current.resize()
+          return
         }
+        initializeMap()
       })
+      observer.observe(mapEl.current)
+    }
 
-      map.addLayer({
-        id: FEATURE_OUTLINE_ID,
-        type: 'line',
-        source: FEATURE_SOURCE_ID,
-        paint: {
-          'line-color': ['case', ['boolean', ['feature-state', 'selected'], false], '#ffffff', ['boolean', ['feature-state', 'hover'], false], 'rgba(255,255,255,0.8)', 'rgba(255,255,255,0.18)'],
-          'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 2.2, ['boolean', ['feature-state', 'hover'], false], 1.2, 0.55]
-        }
+    if (!mapRef.current) {
+      frameId = window.requestAnimationFrame(() => {
+        initializeMap()
       })
-
-      map.addLayer({
-        id: FEATURE_LABEL_ID,
-        type: 'symbol',
-        source: FEATURE_SOURCE_ID,
-        minzoom: 10.8,
-        layout: {
-          'text-field': ['get', activeLens.nameKey],
-          'text-size': activeLensId === 'economy' ? 9 : 10,
-          'text-max-width': 8,
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular']
-        },
-        paint: {
-          'text-color': 'rgba(255,255,255,0.64)',
-          'text-halo-color': 'rgba(7, 9, 20, 0.82)',
-          'text-halo-width': 1
-        }
-      })
-
-      applyActiveMetricColor(map, activeLensId, activeMetric, activeCollection)
-      applyActiveMetricVisibility(map, activeMetric)
-
-      map.on('mousemove', FEATURE_FILL_ID, (event) => {
-        const feature = event.features?.[0]
-        if (!feature) return
-        const featureId = feature.id ?? feature.properties?.__featureId
-        if (!featureId) return
-        if (hoveredFeatureIdRef.current && hoveredFeatureIdRef.current !== featureId) {
-          map.setFeatureState({ source: FEATURE_SOURCE_ID, id: hoveredFeatureIdRef.current }, { hover: false })
-        }
-        map.setFeatureState({ source: FEATURE_SOURCE_ID, id: featureId }, { hover: true })
-        hoveredFeatureIdRef.current = featureId
-        setHoveredFeatureId(featureId)
-        setHoveredPos({ x: event.point.x, y: event.point.y })
-        map.getCanvas().style.cursor = 'pointer'
-      })
-
-      map.on('mouseleave', FEATURE_FILL_ID, () => {
-        if (hoveredFeatureIdRef.current) {
-          map.setFeatureState({ source: FEATURE_SOURCE_ID, id: hoveredFeatureIdRef.current }, { hover: false })
-          hoveredFeatureIdRef.current = null
-        }
-        setHoveredFeatureId(null)
-        map.getCanvas().style.cursor = ''
-      })
-
-      map.on('click', FEATURE_FILL_ID, (event) => {
-        const feature = event.features?.[0]
-        if (!feature) return
-        const featureId = feature.id ?? feature.properties?.__featureId
-        if (!featureId) return
-        const fullFeature = activeCollectionRef.current?.features?.find((item) => String(item.id) === String(featureId))
-        setSelectedFeatureId(featureId)
-        setSelectedFeatureState(featureId)
-        fitFeatureOnMap(fullFeature)
-      })
-
-      setMapLoaded(true)
-    })
+    }
 
     return () => {
-      map.remove()
+      cancelled = true
+      setMapLoaded(false)
+      if (frameId) window.cancelAnimationFrame(frameId)
+      if (observer) observer.disconnect()
+      if (map) map.remove()
       mapRef.current = null
     }
   }, [activeCollection, activeLens.nameKey, activeLensId, activeMetric, applyActiveMetricColor, applyActiveMetricVisibility, fitFeatureOnMap, setSelectedFeatureState])
@@ -1113,6 +1149,29 @@ export default function WardExplorer({ onEnterDashboard }) {
     if (!mapLoaded || !selectedFeature) return
     setSelectedFeatureState(selectedFeature.id)
   }, [mapLoaded, selectedFeature, setSelectedFeatureState])
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return
+
+    const map = mapRef.current
+    const resizeMap = () => {
+      if (!mapRef.current) return
+      mapRef.current.resize()
+    }
+
+    const immediateTimer = window.setTimeout(resizeMap, 0)
+    const settleTimer = window.setTimeout(resizeMap, 180)
+
+    window.addEventListener('resize', resizeMap)
+    document.addEventListener('visibilitychange', resizeMap)
+
+    return () => {
+      window.clearTimeout(immediateTimer)
+      window.clearTimeout(settleTimer)
+      window.removeEventListener('resize', resizeMap)
+      document.removeEventListener('visibilitychange', resizeMap)
+    }
+  }, [mapLoaded])
 
   const handleMetricChange = useCallback((metricKey) => {
     setMetricByLens((current) => ({ ...current, [activeLensId]: metricKey }))

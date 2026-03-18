@@ -142,7 +142,7 @@ const LENS_CONFIG = {
     subtitle: 'Formal employment, establishments, income and growth hotspots by tax hexagon.',
     datasetPath: '/data/CPT/master_tax_hexagons_enriched.geojson',
     nameKey: 'display_name',
-    searchPlaceholder: 'Search hexagons...',
+    searchPlaceholder: 'Search economic areas...',
     metrics: [
       { key: 'tax_employment_latest', label: 'Formal Jobs', description: 'Estimated formal jobs in the latest year.', format: 'integer', low: '#11243a', high: '#48d0ff' },
       { key: 'tax_establishments_latest', label: 'Registered Establishments', description: 'Estimated registered establishments in the latest year.', format: 'integer', low: '#36210e', high: '#ffbf6c' },
@@ -366,6 +366,14 @@ function buildMetricVisibilityFilter(metricKey) {
   ]
 }
 
+function getFillOpacityExpression(lensId) {
+  if (lensId === 'economy') {
+    return ['case', ['boolean', ['feature-state', 'selected'], false], 0.48, ['boolean', ['feature-state', 'hover'], false], 0.34, 0.2]
+  }
+
+  return ['case', ['boolean', ['feature-state', 'selected'], false], 0.92, ['boolean', ['feature-state', 'hover'], false], 0.84, 0.7]
+}
+
 function traverseCoordinates(coordinates, callback) {
   if (!Array.isArray(coordinates)) return
   if (typeof coordinates[0] === 'number' && typeof coordinates[1] === 'number') {
@@ -438,7 +446,7 @@ function enrichSuburbCollection(collection) {
 function enrichEconomyCollection(collection) {
   return {
     ...collection,
-    features: (collection.features || []).map((feature) => {
+    features: (collection.features || []).map((feature, index) => {
       const properties = feature.properties || {}
       return {
         ...feature,
@@ -446,7 +454,7 @@ function enrichEconomyCollection(collection) {
         properties: {
           ...properties,
           __featureId: String(properties.hex7),
-          display_name: `Hex ${properties.hex7}`,
+          display_name: `Economic Area ${index + 1}`,
           tax_employment_latest: Number(properties.tax_employment_latest ?? properties.tax_employment_2025 ?? 0),
           tax_establishments_latest: Number(properties.tax_establishments_latest ?? properties.tax_establishments_2025 ?? 0),
           tax_median_income_latest: Number(properties.tax_median_income_latest ?? properties.tax_median_income_2025 ?? 0)
@@ -984,7 +992,7 @@ export default function WardExplorer({ onEnterDashboard }) {
           source: FEATURE_SOURCE_ID,
           paint: {
             'fill-color': activeMetric.high,
-            'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.92, ['boolean', ['feature-state', 'hover'], false], 0.84, 0.7]
+            'fill-opacity': getFillOpacityExpression(activeLensId)
           }
         })
 
@@ -1007,7 +1015,8 @@ export default function WardExplorer({ onEnterDashboard }) {
             'text-field': ['get', activeLens.nameKey],
             'text-size': activeLensId === 'economy' ? 9 : 10,
             'text-max-width': 8,
-            'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular']
+            'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+            visibility: activeLensId === 'economy' ? 'none' : 'visible'
           },
           paint: {
             'text-color': 'rgba(255,255,255,0.64)',
@@ -1098,6 +1107,7 @@ export default function WardExplorer({ onEnterDashboard }) {
     source.setData(activeCollection)
     map.setLayoutProperty(FEATURE_LABEL_ID, 'text-field', ['get', activeLens.nameKey])
     map.setLayoutProperty(FEATURE_LABEL_ID, 'visibility', activeLensId === 'economy' ? 'none' : 'visible')
+    map.setPaintProperty(FEATURE_FILL_ID, 'fill-opacity', getFillOpacityExpression(activeLensId))
     applyActiveMetricColor(map, activeLensId, activeMetric, activeCollection)
     applyActiveMetricVisibility(map, activeMetric)
     map.easeTo({ ...BASE_MAP_VIEW, duration: 700 })
@@ -1114,6 +1124,8 @@ export default function WardExplorer({ onEnterDashboard }) {
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return
     if (!mapRef.current.isStyleLoaded() || !mapRef.current.getLayer(FEATURE_FILL_ID) || !mapRef.current.getLayer(FEATURE_OUTLINE_ID) || !mapRef.current.getLayer(FEATURE_LABEL_ID)) return
+    mapRef.current.setPaintProperty(FEATURE_FILL_ID, 'fill-opacity', getFillOpacityExpression(activeLensId))
+    mapRef.current.setLayoutProperty(FEATURE_LABEL_ID, 'visibility', activeLensId === 'economy' ? 'none' : 'visible')
     applyActiveMetricColor(mapRef.current, activeLensId, activeMetric)
     applyActiveMetricVisibility(mapRef.current, activeMetric)
   }, [activeLensId, activeMetric, applyActiveMetricColor, applyActiveMetricVisibility, mapLoaded])
